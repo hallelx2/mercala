@@ -1,0 +1,17 @@
+# Normalize line endings: LF in the repo by default
+* text=auto eol=lf
+
+# Windows batch scripts must be CRLF or cmd.exe mis-parses them
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# POSIX shell / wrapper script stays LF
+mvnw text eol=lf
+*.sh text eol=lf
+
+# Binaries
+*.jar binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

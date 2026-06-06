@@ -11,7 +11,7 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
-.mvn/wrapper/maven-wrapper.properties
+# NOTE: .mvn/wrapper/maven-wrapper.properties IS committed (required by the wrapper)
 
 # Java
 *.class
