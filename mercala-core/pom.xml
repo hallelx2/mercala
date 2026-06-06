@@ -18,7 +18,7 @@
         <dependency>
             <groupId>com.mercala</groupId>
             <artifactId>mercala-contracts</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
     </dependencies>
 </project>
