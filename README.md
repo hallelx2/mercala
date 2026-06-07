@@ -36,6 +36,29 @@ Requires JDK 21.
 ./mvnw clean install      # build + test all modules
 ```
 
+## Local infrastructure
+
+The project uses Docker Compose to run local infrastructure dependencies.
+
+Start the services in the background:
+```bash
+docker compose up -d
+```
+
+Stop the services:
+```bash
+docker compose down
+```
+
+### Services
+
+- **Postgres:** Port `5432` (user: `mercala`, password: `mercala`, db: `mercala`). Uses ParadeDB (pg_search, pgvector).
+- **Kafka:** Port `9092` (single broker, KRaft mode).
+- **Redis:** Port `6379`.
+- **MinIO:** API Port `9000`, Console Port `9001` (user: `minioadmin`, password: `minioadmin`).
+
+All services use named volumes for persistence.
+
 ## Roadmap
 
 10 build phases (M0–M9) + a launch phase (M10), tracked in Linear. M0 = this foundation.
