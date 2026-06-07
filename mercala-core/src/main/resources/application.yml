@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: mercala-core
+
+server:
+  port: 8080
+
+# Actuator: expose health (+ info). Liveness/readiness probes enabled for K8s later.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
