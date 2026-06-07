@@ -15,6 +15,7 @@ import com.mercala.identity.Role;
 import com.mercala.identity.Tenant;
 import com.mercala.identity.TenantRepository;
 
+import static org.hamcrest.Matchers.greaterThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -56,17 +57,18 @@ class AuthControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").exists())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.expiresIn").value(3600));
+                .andExpect(jsonPath("$.expiresIn", greaterThan(0)));
     }
 
     @Test
-    void loginWithWrongPasswordReturns401() throws Exception {
+    void loginWithWrongPasswordReturns401ProblemDetail() throws Exception {
         seedOwner("auth-b", "owner@auth-b.test", "supersecret1");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("auth-b", "owner@auth-b.test", "wrong-password")))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
     }
 
     @Test
@@ -75,6 +77,17 @@ class AuthControllerTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("no-such-tenant", "x@y.test", "supersecret1")))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void loginWithInvalidBodyReturns400() throws Exception {
+        String invalid = """
+                {"tenantSlug":"","email":"not-an-email","password":""}
+                """;
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalid))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -27,7 +27,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/**", "/docs", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/tenants/**").permitAll()
                         .anyRequest().authenticated())
@@ -38,8 +39,13 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /** Returns an RFC 7807-style JSON body for unauthenticated requests (no container HTML page). */
     private AuthenticationEntryPoint unauthorizedEntryPoint() {
-        return (request, response, authException) ->
-                response.sendError(HttpStatus.UNAUTHORIZED.value(), "Unauthorized");
+        return (request, response, authException) -> {
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            response.setContentType("application/problem+json");
+            response.getWriter().write(
+                    "{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"Authentication required\"}");
+        };
     }
 }

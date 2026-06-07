@@ -29,7 +29,12 @@ public class JwtService {
     public JwtService(
             @Value("${mercala.jwt.secret}") String secret,
             @Value("${mercala.jwt.expiration-seconds}") long expirationSeconds) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "mercala.jwt.secret must be at least 32 bytes for HS256 (got " + keyBytes.length + ")");
+        }
+        this.key = Keys.hmacShaKeyFor(keyBytes);
         this.expirationSeconds = expirationSeconds;
     }
 

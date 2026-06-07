@@ -1,0 +1,6 @@
+# Test-only config (activated by @ActiveProfiles("test") on AbstractIntegrationTest).
+# Provides a JWT secret so the context boots without requiring MERCALA_JWT_SECRET in CI.
+mercala:
+  jwt:
+    secret: test-only-secret-not-used-anywhere-real-0123456789abcdef
+    expiration-seconds: 3600
