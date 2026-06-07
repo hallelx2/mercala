@@ -17,7 +17,7 @@ import org.testcontainers.utility.DockerImageName;
  * Flyway then runs the migrations against it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-abstract class AbstractIntegrationTest {
+public abstract class AbstractIntegrationTest {
 
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES =
