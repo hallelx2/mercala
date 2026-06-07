@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record CreateTenantRequest(
         @NotBlank @Size(max = 63) String slug,
-        @NotBlank String name,
-        @NotBlank @Email String ownerEmail,
-        @NotBlank @Size(min = 8) String ownerPassword
+        @NotBlank @Size(max = 255) String name,
+        @NotBlank @Email @Size(max = 320) String ownerEmail,
+        @NotBlank @Size(min = 8, max = 100) String ownerPassword
 ) {}
