@@ -5,12 +5,13 @@ spring:
 server:
   port: 8080
 
-# Actuator: expose health (+ info). Liveness/readiness probes enabled for K8s later.
+# Actuator: expose only health on the web port (no metadata leakage without auth).
+# Liveness/readiness probes enabled for Kubernetes later.
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
   endpoint:
     health:
       probes:
