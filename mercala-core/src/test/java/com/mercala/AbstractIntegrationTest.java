@@ -3,21 +3,22 @@ package com.mercala;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * Base class for integration tests. Starts a single ParadeDB Postgres container
- * (shared across all subclasses, since the container is {@code static}) and wires
- * the Spring datasource to it via {@link ServiceConnection}. Flyway then runs the
- * migrations against this real database — so tests exercise the actual schema path.
+ * Base class for integration tests using the <b>singleton container</b> pattern:
+ * one ParadeDB Postgres container is started once in a static initializer and reused
+ * by every subclass for the whole JVM (Testcontainers' Ryuk reaps it at shutdown).
+ *
+ * <p>We deliberately do <em>not</em> use {@code @Testcontainers} / {@code @Container}
+ * here — those manage the container lifecycle <em>per test class</em>, which would stop
+ * the shared static container after the first class and leave later classes unable to
+ * connect. {@link ServiceConnection} wires the Spring datasource to this container, and
+ * Flyway then runs the migrations against it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 abstract class AbstractIntegrationTest {
 
-    @Container
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>(
@@ -26,4 +27,8 @@ abstract class AbstractIntegrationTest {
                     .withDatabaseName("mercala")
                     .withUsername("mercala")
                     .withPassword("mercala");
+
+    static {
+        POSTGRES.start();
+    }
 }
