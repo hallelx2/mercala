@@ -1,5 +1,7 @@
 # Mercala
 
+[![CI](https://github.com/hallelx2/mercala/actions/workflows/ci.yml/badge.svg)](https://github.com/hallelx2/mercala/actions/workflows/ci.yml)
+
 > **Agent-native, multi-tenant e-commerce platform.** Shopify-class, but the primary interface is *agentic*: merchants run their store by talking to agents (add products by chat, AI product imagery), and shoppers discover and buy by talking to agents.
 
 Built with **Java 21 · Spring Boot · Postgres · Kafka · Spring AI**. Planning + roadmap live in **Linear** (initiative *Mercala*, team Hallelx2).
