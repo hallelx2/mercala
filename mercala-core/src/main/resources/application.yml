@@ -2,11 +2,26 @@ spring:
   application:
     name: mercala-core
 
+  # Datasource defaults to the local Docker Compose Postgres (ParadeDB).
+  # Override via SPRING_DATASOURCE_* env vars in other environments (12-factor).
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/mercala}
+    username: ${SPRING_DATASOURCE_USERNAME:mercala}
+    password: ${SPRING_DATASOURCE_PASSWORD:mercala}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate        # schema is owned by Flyway, never auto-generated
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
 server:
   port: 8080
 
 # Actuator: expose only health on the web port (no metadata leakage without auth).
-# Liveness/readiness probes enabled for Kubernetes later.
 management:
   endpoints:
     web:

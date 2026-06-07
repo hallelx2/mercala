@@ -4,7 +4,6 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
@@ -13,12 +12,11 @@ import org.springframework.http.ResponseEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Smoke test: the application context loads and the Actuator health endpoint reports UP.
- * Asserts the parsed top-level {@code status} field (not a raw substring) so it can't be
- * fooled by a nested component status.
+ * Smoke test: the application context loads (with a real Postgres via Testcontainers)
+ * and the Actuator health endpoint reports UP. Asserts the parsed top-level
+ * {@code status} field rather than a raw substring.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class HealthEndpointTest {
+class HealthEndpointTest extends AbstractIntegrationTest {
 
     @Autowired
     private TestRestTemplate rest;
