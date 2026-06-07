@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.mercala.identity.exception.InvalidCredentialsException;
 import com.mercala.identity.exception.ResourceConflictException;
 import com.mercala.identity.exception.ResourceNotFoundException;
 
@@ -27,10 +28,16 @@ public class GlobalExceptionHandler {
 
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-            // keep the first message per field
             fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
         problem.setProperty("errors", fieldErrors);
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ProblemDetail handleInvalidCredentials(InvalidCredentialsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Unauthorized");
         return problem;
     }
 

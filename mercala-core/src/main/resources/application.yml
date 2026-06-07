@@ -21,6 +21,13 @@ spring:
 server:
   port: 8080
 
+# JWT auth config. No default secret on purpose: the app fails fast if
+# MERCALA_JWT_SECRET is not provided (>= 32 bytes for HS256). Tests use the `test` profile.
+mercala:
+  jwt:
+    secret: ${MERCALA_JWT_SECRET}
+    expiration-seconds: ${MERCALA_JWT_EXPIRATION_SECONDS:3600}
+
 # Actuator: expose only health on the web port (no metadata leakage without auth).
 management:
   endpoints:
