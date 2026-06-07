@@ -4,6 +4,6 @@
  * module's tables — so a module can later be extracted into its own service.
  *
  * Modules: identity, catalog, inventory, cart, orders, payments, media, platform.
- * The Spring Boot application class arrives in HAL-120.
+ * Bootstrapped by {@link com.mercala.MercalaCoreApplication}.
  */
 package com.mercala;
