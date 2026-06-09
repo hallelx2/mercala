@@ -1,6 +1,7 @@
 package com.mercala.identity.web;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,6 +37,7 @@ public class RegistrationController {
     }
 
     @PostMapping("/{slug}/users")
+    @PreAuthorize("hasRole('MERCHANT_OWNER')")   // owner-only — RBAC (HAL-127)
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse addUser(@PathVariable String slug, @Valid @RequestBody CreateUserRequest request) {
         AppUser user = registrationService.addUser(slug, request);
