@@ -1,5 +1,7 @@
 package com.mercala.platform.security;
 
+import java.io.IOException;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -8,10 +10,10 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Stateless JWT security with method-level RBAC.
@@ -40,31 +42,22 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/tenants").permitAll()   // public store signup
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
-                        .authenticationEntryPoint(unauthorizedEntryPoint())   // 401 (not logged in)
-                        .accessDeniedHandler(accessDeniedHandler()))          // 403 (logged in, wrong role)
+                        .authenticationEntryPoint((req, res, ex) ->                     // 401 (not logged in)
+                                writeProblem(res, HttpStatus.UNAUTHORIZED, "Unauthorized", "Authentication required"))
+                        .accessDeniedHandler((req, res, ex) ->                          // 403 (wrong role)
+                                writeProblem(res, HttpStatus.FORBIDDEN, "Forbidden", "Insufficient permissions")))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .httpBasic(b -> b.disable())
                 .formLogin(f -> f.disable());
         return http.build();
     }
 
-    /** RFC 7807 JSON for unauthenticated requests. */
-    private AuthenticationEntryPoint unauthorizedEntryPoint() {
-        return (request, response, authException) -> {
-            response.setStatus(HttpStatus.UNAUTHORIZED.value());
-            response.setContentType("application/problem+json");
-            response.getWriter().write(
-                    "{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"Authentication required\"}");
-        };
-    }
-
-    /** RFC 7807 JSON for authenticated-but-forbidden requests (failed @PreAuthorize). */
-    private AccessDeniedHandler accessDeniedHandler() {
-        return (request, response, accessDeniedException) -> {
-            response.setStatus(HttpStatus.FORBIDDEN.value());
-            response.setContentType("application/problem+json");
-            response.getWriter().write(
-                    "{\"title\":\"Forbidden\",\"status\":403,\"detail\":\"Insufficient permissions\"}");
-        };
+    /** Writes a minimal RFC 7807 {@code application/problem+json} body — shared by the 401 + 403 handlers. */
+    private static void writeProblem(HttpServletResponse response, HttpStatus status, String title, String detail)
+            throws IOException {
+        response.setStatus(status.value());
+        response.setContentType("application/problem+json");
+        response.getWriter().write(
+                "{\"title\":\"%s\",\"status\":%d,\"detail\":\"%s\"}".formatted(title, status.value(), detail));
     }
 }

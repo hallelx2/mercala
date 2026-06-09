@@ -121,7 +121,8 @@ class RegistrationControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(post("/api/tenants/" + slug + "/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(userJson("staff@noauth.store", Role.MERCHANT_STAFF)))
-                .andExpect(status().isUnauthorized());          // not logged in
+                .andExpect(status().isUnauthorized())           // not logged in
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
     }
 
     @Test
@@ -134,7 +135,20 @@ class RegistrationControllerTest extends AbstractIntegrationTest {
                         .header("Authorization", tokenForRole(Role.SHOPPER))   // logged in, but wrong role
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(userJson("staff@rbac.store", Role.MERCHANT_STAFF)))
-                .andExpect(status().isForbidden());             // 403
+                .andExpect(status().isForbidden())              // 403
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
+
+    @Test
+    void ownerAddUserWithInvalidBodyReturns400() throws Exception {
+        // a valid owner, but a malformed body — validation still runs before the handler
+        mockMvc.perform(post("/api/tenants/some-store/users")
+                        .header("Authorization", tokenForRole(Role.MERCHANT_OWNER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"not-an-email","password":"short","role":"MERCHANT_STAFF"}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
