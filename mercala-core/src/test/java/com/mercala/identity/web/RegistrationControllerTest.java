@@ -50,13 +50,13 @@ class RegistrationControllerTest extends AbstractIntegrationTest {
         return "Bearer " + jwtService.issue(owner);
     }
 
-    /** Seed a user with the given role (in its own tenant) and mint a Bearer token. */
+    /** Seed a fresh user with the given role (in its own unique tenant) and mint a Bearer token. */
     private String tokenForRole(Role role) {
-        String slug = "tok-" + role.name().toLowerCase();
-        Tenant tenant = tenantRepository.findBySlug(slug)
-                .orElseGet(() -> tenantRepository.save(new Tenant(slug, slug)));
+        String unique = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String slug = "tok-" + role.name().toLowerCase() + "-" + unique;
+        Tenant tenant = tenantRepository.save(new Tenant(slug, slug));
         AppUser user = userRepository.save(new AppUser(
-                tenant.getId(), role.name().toLowerCase() + "@" + slug + ".test",
+                tenant.getId(), "user-" + unique + "@example.test",
                 passwordEncoder.encode("supersecretpassword"), role));
         return "Bearer " + jwtService.issue(user);
     }
