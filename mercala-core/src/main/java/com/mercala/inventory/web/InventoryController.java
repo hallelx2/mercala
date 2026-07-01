@@ -36,8 +36,7 @@ public class InventoryController {
     @PostMapping("/{variantId}/adjust")
     @PreAuthorize("hasRole('MERCHANT_OWNER') or hasRole('MERCHANT_STAFF')")
     public StockResponse adjustStock(@PathVariable UUID variantId, @Valid @RequestBody AdjustStockRequest request) {
-        inventoryService.adjustStock(variantId, request.quantity());
-        StockItem item = inventoryService.getStockItem(variantId);
+        StockItem item = inventoryService.adjustStock(variantId, request.quantity());
         return mapToResponse(item);
     }
 

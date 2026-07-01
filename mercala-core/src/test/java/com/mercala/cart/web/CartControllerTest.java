@@ -124,7 +124,7 @@ class CartControllerTest extends AbstractIntegrationTest {
 
         mockMvc.perform(delete("/api/cart")
                         .header("Authorization", shopperToken))
-                .andExpect(status().isOk());
+                .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/cart")
                         .header("Authorization", shopperToken))

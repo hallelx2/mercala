@@ -9,5 +9,6 @@ public record AddCartItemRequest(
         UUID variantId,
 
         @Min(value = 1, message = "Quantity must be at least 1")
+        @jakarta.validation.constraints.Max(value = 10000, message = "Quantity cannot exceed 10000")
         int quantity
 ) {}

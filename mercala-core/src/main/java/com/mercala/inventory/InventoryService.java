@@ -22,23 +22,22 @@ public class InventoryService {
 
     @Transactional(readOnly = true)
     public StockItem getStockItem(UUID variantId) {
-        // First validate variant exists and is accessible to current tenant
-        getRequiredVariant(variantId);
-        
         return stockItemRepository.findByVariantId(variantId)
                 .orElseThrow(() -> new ResourceNotFoundException("StockItem not found for variant: " + variantId));
     }
 
-    public void adjustStock(UUID variantId, int newQuantity) {
+    public StockItem adjustStock(UUID variantId, int newQuantity) {
         UUID tenantId = getRequiredTenantId();
-        // Validate variant exists and is accessible to current tenant
-        getRequiredVariant(variantId);
 
         StockItem item = stockItemRepository.findByVariantId(variantId)
-                .orElseGet(() -> new StockItem(tenantId, variantId, 0));
+                .orElseGet(() -> {
+                    // Validate variant exists and is accessible to current tenant only when creating new stock
+                    getRequiredVariant(variantId, tenantId);
+                    return new StockItem(tenantId, variantId, 0);
+                });
         
         item.setQuantity(newQuantity);
-        stockItemRepository.save(item);
+        return stockItemRepository.save(item);
     }
 
     public void reserveStock(UUID variantId, int qty) {
@@ -59,8 +58,7 @@ public class InventoryService {
         stockItemRepository.save(item);
     }
 
-    private Variant getRequiredVariant(UUID variantId) {
-        UUID tenantId = getRequiredTenantId();
+    private Variant getRequiredVariant(UUID variantId, UUID tenantId) {
         return variantRepository.findByIdAndTenantId(variantId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Variant not found: " + variantId));
     }

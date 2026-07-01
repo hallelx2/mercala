@@ -42,7 +42,17 @@ public class CheckoutController {
             key = request.idempotencyKey();
         }
 
-        Order order = checkoutService.checkout(user.userId(), key);
+        Order order;
+        try {
+            order = checkoutService.checkout(user.userId(), key);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            if (key != null && !key.isBlank()) {
+                order = checkoutService.findExistingOrder(key)
+                        .orElseThrow(() -> e);
+            } else {
+                throw e;
+            }
+        }
         return mapToResponse(order);
     }
 

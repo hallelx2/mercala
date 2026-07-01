@@ -2,6 +2,7 @@ package com.mercala.cart;
 
 import java.util.UUID;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,33 +29,32 @@ public class CartService {
     }
 
     public Cart addOrUpdateLine(UUID userId, UUID variantId, int qty) {
-        UUID tenantId = getRequiredTenantId();
-        validateVariantExists(variantId, tenantId);
-
-        Cart cart = getOrCreateCart(userId);
-        cart.addOrUpdateLine(variantId, qty);
-        return cartRepository.save(cart);
+        return mutateCartWithVariant(userId, variantId, cart -> cart.addOrUpdateLine(variantId, qty));
     }
 
     public Cart updateLine(UUID userId, UUID variantId, int qty) {
-        UUID tenantId = getRequiredTenantId();
-        validateVariantExists(variantId, tenantId);
-
-        Cart cart = getOrCreateCart(userId);
-        cart.updateLine(variantId, qty);
-        return cartRepository.save(cart);
+        return mutateCartWithVariant(userId, variantId, cart -> cart.updateLine(variantId, qty));
     }
 
     public Cart removeLine(UUID userId, UUID variantId) {
-        Cart cart = getOrCreateCart(userId);
-        cart.removeLine(variantId);
-        return cartRepository.save(cart);
+        return mutateCart(userId, cart -> cart.removeLine(variantId));
     }
 
     public void clearCart(UUID userId) {
+        mutateCart(userId, Cart::clearLines);
+    }
+
+    private Cart mutateCart(UUID userId, java.util.function.Consumer<Cart> mutation) {
         Cart cart = getOrCreateCart(userId);
-        cart.getLines().clear();
-        cartRepository.save(cart);
+        mutation.accept(cart);
+        return cartRepository.save(cart);
+    }
+
+    private Cart mutateCartWithVariant(UUID userId, UUID variantId, java.util.function.Consumer<Cart> mutation) {
+        Cart cart = getOrCreateCart(userId);
+        validateVariantExists(variantId, cart.getTenantId());
+        mutation.accept(cart);
+        return cartRepository.save(cart);
     }
 
     private void validateVariantExists(UUID variantId, UUID tenantId) {
@@ -65,7 +65,7 @@ public class CartService {
     private UUID getRequiredTenantId() {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null) {
-            throw new org.springframework.security.access.AccessDeniedException("Tenant context is required");
+            throw new AccessDeniedException("Tenant context is required");
         }
         return tenantId;
     }

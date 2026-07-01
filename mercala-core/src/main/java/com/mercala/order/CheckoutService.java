@@ -53,12 +53,18 @@ public class CheckoutService {
             throw new IllegalStateException("Cannot checkout an empty cart");
         }
 
-        // 3. Validate stock & calculate price
-        BigDecimal totalAmount = BigDecimal.ZERO;
+        // 3. Pre-load all variants into a map to avoid redundant database lookups
+        java.util.Map<UUID, Variant> variantMap = new java.util.HashMap<>();
         for (CartLine line : cart.getLines()) {
-            // Validate variant exists in tenant context
             Variant variant = variantRepository.findByIdAndTenantId(line.getVariantId(), tenantId)
                     .orElseThrow(() -> new ResourceNotFoundException("Variant not found: " + line.getVariantId()));
+            variantMap.put(line.getVariantId(), variant);
+        }
+
+        // 4. Validate stock & calculate price
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (CartLine line : cart.getLines()) {
+            Variant variant = variantMap.get(line.getVariantId());
 
             // Validate inventory availability
             StockItem stockItem = inventoryService.getStockItem(line.getVariantId());
@@ -71,24 +77,30 @@ public class CheckoutService {
             totalAmount = totalAmount.add(lineTotal);
         }
 
-        // 4. Reserve stock in inventory
+        // 5. Reserve stock in inventory
         for (CartLine line : cart.getLines()) {
             inventoryService.reserveStock(line.getVariantId(), line.getQuantity());
         }
 
-        // 5. Create Order
+        // 6. Create Order
         Order order = new Order(tenantId, userId, totalAmount, idempotencyKey);
         for (CartLine line : cart.getLines()) {
-            Variant variant = variantRepository.findByIdAndTenantId(line.getVariantId(), tenantId).orElseThrow();
+            Variant variant = variantMap.get(line.getVariantId());
             order.addLine(line.getVariantId(), line.getQuantity(), variant.getPrice());
         }
 
         Order savedOrder = orderRepository.save(order);
 
-        // 6. Clear cart
+        // 7. Clear cart
         cartService.clearCart(userId);
 
         return savedOrder;
+    }
+
+    @Transactional(readOnly = true, propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public java.util.Optional<Order> findExistingOrder(String idempotencyKey) {
+        UUID tenantId = getRequiredTenantId();
+        return orderRepository.findByIdempotencyKeyAndTenantId(idempotencyKey, tenantId);
     }
 
     private UUID getRequiredTenantId() {
