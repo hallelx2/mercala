@@ -1,0 +1,37 @@
+package com.mercala.platform.multitenancy;
+
+import java.util.UUID;
+
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.hibernate.Session;
+import org.springframework.stereotype.Component;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
+/**
+ * Aspect that automatically intercepts repository calls and enables the Hibernate
+ * {@code tenantFilter} on the active {@code Session} using the tenant ID from
+ * {@link TenantContext}. This guarantees database queries are automatically scoped
+ * at the application layer.
+ */
+@Aspect
+@Component
+public class TenantFilterAspect {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Before("execution(* org.springframework.data.repository.Repository+.*(..))")
+    public void enableTenantFilter() {
+        UUID tenantId = TenantContext.getCurrentTenant();
+        Session session = entityManager.unwrap(Session.class);
+        if (tenantId != null) {
+            var filter = session.enableFilter("tenantFilter");
+            filter.setParameter("tenantId", tenantId);
+        } else {
+            session.disableFilter("tenantFilter");
+        }
+    }
+}

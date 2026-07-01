@@ -19,6 +19,9 @@ import com.mercala.identity.web.dto.UserResponse;
 
 import jakarta.validation.Valid;
 
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+
 @RestController
 @RequestMapping("/api/tenants")
 public class RegistrationController {
@@ -42,5 +45,13 @@ public class RegistrationController {
     public UserResponse addUser(@PathVariable String slug, @Valid @RequestBody CreateUserRequest request) {
         AppUser user = registrationService.addUser(slug, request);
         return new UserResponse(user.getId(), user.getEmail(), user.getRole());
+    }
+
+    @GetMapping("/{slug}/users")
+    @PreAuthorize("hasRole('MERCHANT_OWNER') or hasRole('MERCHANT_STAFF')")
+    public List<UserResponse> getUsers(@PathVariable String slug) {
+        return registrationService.getUsers(slug).stream()
+                .map(user -> new UserResponse(user.getId(), user.getEmail(), user.getRole()))
+                .toList();
     }
 }

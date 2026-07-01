@@ -14,6 +14,8 @@ import com.mercala.identity.exception.ResourceNotFoundException;
 import com.mercala.identity.web.dto.CreateTenantRequest;
 import com.mercala.identity.web.dto.CreateUserRequest;
 
+import java.util.List;
+
 @Service
 @Transactional
 public class RegistrationService {
@@ -54,5 +56,12 @@ public class RegistrationService {
         String hashedPassword = passwordEncoder.encode(request.password());
         AppUser user = new AppUser(tenant.getId(), request.email(), hashedPassword, request.role());
         return userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AppUser> getUsers(String tenantSlug) {
+        tenantRepository.findBySlug(tenantSlug)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant not found: " + tenantSlug));
+        return userRepository.findAll();
     }
 }
