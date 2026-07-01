@@ -29,4 +29,18 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
         """,
         nativeQuery = true)
     Page<Product> searchLexical(@Param("query") String query, Pageable pageable);
+
+    @Query(value = """
+        SELECT p.* FROM product p
+        WHERE p.tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid
+          AND p.embedding IS NOT NULL
+        ORDER BY p.embedding <=> CAST(:queryEmbedding AS vector) ASC
+        """,
+        countQuery = """
+        SELECT count(*) FROM product p
+        WHERE p.tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid
+          AND p.embedding IS NOT NULL
+        """,
+        nativeQuery = true)
+    Page<Product> searchSemantic(@Param("queryEmbedding") String queryEmbedding, Pageable pageable);
 }

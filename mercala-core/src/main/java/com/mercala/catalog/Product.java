@@ -12,6 +12,7 @@ import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.CascadeType;
@@ -63,6 +64,13 @@ public class Product {
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "tags", columnDefinition = "varchar(255)[]")
     private List<String> tags = new ArrayList<>();
+
+    @Column(name = "embedding", columnDefinition = "vector(1536)")
+    @ColumnTransformer(
+        read = "embedding::text",
+        write = "CAST(? AS vector)"
+    )
+    private String embedding;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Variant> variants = new ArrayList<>();
@@ -173,6 +181,44 @@ public class Product {
 
     public void setTags(List<String> tags) {
         this.tags = tags;
+    }
+
+    public float[] getEmbedding() {
+        if (this.embedding == null) {
+            return null;
+        }
+        String valueStr = this.embedding.trim();
+        if (valueStr.startsWith("[")) {
+            valueStr = valueStr.substring(1);
+        }
+        if (valueStr.endsWith("]")) {
+            valueStr = valueStr.substring(0, valueStr.length() - 1);
+        }
+        if (valueStr.trim().isEmpty()) {
+            return new float[0];
+        }
+        String[] parts = valueStr.split(",");
+        float[] result = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Float.parseFloat(parts[i].trim());
+        }
+        return result;
+    }
+
+    public void setEmbedding(float[] embedding) {
+        if (embedding == null) {
+            this.embedding = null;
+            return;
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < embedding.length; i++) {
+            sb.append(embedding[i]);
+            if (i < embedding.length - 1) {
+                sb.append(",");
+            }
+        }
+        sb.append("]");
+        this.embedding = sb.toString();
     }
 
     public Instant getCreatedAt() {
