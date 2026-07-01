@@ -145,22 +145,22 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
 
         // 5. Test Semantic Search as Tenant A Shopper (synonyms that do not match lexically)
 
-        // Query: "footwear", mode=semantic -> Should match "Red Running Shoes" as top result
+        // Query: "footwear", mode=semantic -> Should match "Red Running Shoes"
         mockMvc.perform(get("/api/search")
                         .header("Authorization", shopperAToken)
                         .param("q", "footwear")
                         .param("mode", "semantic"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content", hasSize(3)))
+                .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].name").value("Red Running Shoes"));
 
-        // Query: "beverage vessel", mode=semantic -> Should match "Coffee Mug" as top result
+        // Query: "beverage vessel", mode=semantic -> Should match "Coffee Mug"
         mockMvc.perform(get("/api/search")
                         .header("Authorization", shopperAToken)
                         .param("q", "beverage vessel")
                         .param("mode", "semantic"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content", hasSize(3)))
+                .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].name").value("Coffee Mug"));
 
         // 6. Test Search as Tenant B Shopper
