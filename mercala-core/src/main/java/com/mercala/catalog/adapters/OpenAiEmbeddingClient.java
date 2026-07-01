@@ -99,10 +99,9 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
         }
 
         int hashCode = normalized.hashCode();
-        
-        // Populate vector values based on hashCode and index offsets
+        java.util.Random random = new java.util.Random(hashCode);
         for (int i = 0; i < 1536; i++) {
-            mockVector[i] = (float) Math.sin(hashCode + (i * 0.13));
+            mockVector[i] = (float) random.nextGaussian();
         }
 
         // L2 Normalize the vector so cosine similarity calculations are mathematically standard (magnitude = 1)
