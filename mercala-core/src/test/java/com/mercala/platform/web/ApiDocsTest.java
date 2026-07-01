@@ -25,7 +25,9 @@ class ApiDocsTest extends AbstractIntegrationTest {
     void openApiSpecIsServedAndIncludesTenantEndpoints() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/api/tenants")));
+                .andExpect(content().string(containsString("/api/tenants")))
+                .andExpect(content().string(containsString("/api/products")))
+                .andExpect(content().string(containsString("/api/categories")));
     }
 
     @Test
