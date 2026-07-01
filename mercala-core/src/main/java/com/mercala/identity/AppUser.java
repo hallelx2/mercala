@@ -16,6 +16,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.FilterDef;
+import org.hibernate.annotations.ParamDef;
+
 /**
  * A user belonging to a tenant. {@code tenantId} is stored as a plain column (the
  * tenant discriminator) so the Hibernate tenant filter + Postgres RLS (HAL-128/129) can
@@ -27,6 +31,10 @@ import jakarta.persistence.UniqueConstraint;
         uniqueConstraints = @UniqueConstraint(
                 name = "uq_app_user_tenant_email",
                 columnNames = {"tenant_id", "email"}))
+@FilterDef(
+        name = "tenantFilter",
+        parameters = @ParamDef(name = "tenantId", type = java.util.UUID.class))
+@Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 public class AppUser {
 
     @Id

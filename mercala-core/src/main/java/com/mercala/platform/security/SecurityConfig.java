@@ -30,7 +30,10 @@ import jakarta.servlet.http.HttpServletResponse;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter)
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtFilter,
+            com.mercala.platform.multitenancy.TenantContextFilter tenantContextFilter)
             throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
@@ -47,6 +50,7 @@ public class SecurityConfig {
                         .accessDeniedHandler((req, res, ex) ->                          // 403 (wrong role)
                                 writeProblem(res, HttpStatus.FORBIDDEN, "Forbidden", "Insufficient permissions")))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(tenantContextFilter, JwtAuthenticationFilter.class)
                 .httpBasic(b -> b.disable())
                 .formLogin(f -> f.disable());
         return http.build();
