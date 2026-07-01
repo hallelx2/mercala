@@ -26,11 +26,13 @@ public class SearchController {
     @PreAuthorize("hasRole('MERCHANT_OWNER') or hasRole('MERCHANT_STAFF') or hasRole('SHOPPER')")
     public Page<ProductResponse> search(
             @RequestParam("q") String query,
-            @RequestParam(value = "mode", defaultValue = "lexical") String mode,
+            @RequestParam(value = "mode", defaultValue = "hybrid") String mode,
             @PageableDefault(size = 10) Pageable pageable) {
         if ("semantic".equalsIgnoreCase(mode)) {
             return productService.searchSemantic(query, pageable);
+        } else if ("lexical".equalsIgnoreCase(mode)) {
+            return productService.searchLexical(query, pageable);
         }
-        return productService.searchLexical(query, pageable);
+        return productService.searchHybrid(query, pageable);
     }
 }

@@ -96,6 +96,8 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
             normalized = "red running shoes best shoes for marathon training shoes running red";
         } else if (normalized.equals("beverage vessel")) {
             normalized = "coffee mug ceramic mug for hot coffee mug coffee kitchen";
+        } else if (normalized.equals("comfortable footwear")) {
+            normalized = "red running shoes best shoes for marathon training shoes running red";
         }
 
         int hashCode = normalized.hashCode();

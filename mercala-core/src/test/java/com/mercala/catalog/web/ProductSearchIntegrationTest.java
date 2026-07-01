@@ -22,6 +22,7 @@ import com.mercala.identity.TenantRepository;
 import com.mercala.platform.multitenancy.TenantContext;
 import com.mercala.platform.security.JwtService;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -172,6 +173,32 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", shopperBToken)
                         .param("q", "footwear")
                         .param("mode", "semantic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(0)));
+
+        // 7. Test Hybrid Search (RRF Fusion) as Tenant A Shopper
+
+        // Query: "comfortable footwear", mode=hybrid (default) -> should match BOTH "Blue Running Socks" (lexical match on "comfortable") AND "Red Running Shoes" (semantic match on "footwear")
+        mockMvc.perform(get("/api/search")
+                        .header("Authorization", shopperAToken)
+                        .param("q", "comfortable footwear"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[*].name").value(containsInAnyOrder("Red Running Shoes", "Blue Running Socks")));
+
+        // Query: "comfortable footwear", mode=hybrid (explicit)
+        mockMvc.perform(get("/api/search")
+                        .header("Authorization", shopperAToken)
+                        .param("q", "comfortable footwear")
+                        .param("mode", "hybrid"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[*].name").value(containsInAnyOrder("Red Running Shoes", "Blue Running Socks")));
+
+        // Query: "comfortable footwear", mode=hybrid (tenant-isolated check for Tenant B)
+        mockMvc.perform(get("/api/search")
+                        .header("Authorization", shopperBToken)
+                        .param("q", "comfortable footwear"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(0)));
     }
