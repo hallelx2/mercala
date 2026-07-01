@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.mercala.AbstractIntegrationTest;
 import com.mercala.platform.security.JwtService;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,18 +51,13 @@ class TenantIsolationIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].email").value("owner-a@example.com"))
-                .andExpect(jsonPath("$[1].email").value("staff-a@example.com"));
+                .andExpect(jsonPath("$[*].email", containsInAnyOrder("owner-a@example.com", "staff-a@example.com")));
 
         // 5. Request Tenant B's users using Owner A's token
-        // Even though the URL path says "tenant-b", the Hibernate filter forces the query
-        // to filter by Owner A's tenant (Tenant A). Thus, it returns Tenant A's users!
+        // This is a cross-tenant access attempt and should fail with 403 Forbidden.
         mockMvc.perform(get("/api/tenants/tenant-b/users")
                         .header("Authorization", tokenA)
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].email").value("owner-a@example.com"))
-                .andExpect(jsonPath("$[1].email").value("staff-a@example.com"));
+                .andExpect(status().isForbidden());
     }
 }

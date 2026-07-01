@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.hibernate.Session;
+import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
 
 import jakarta.persistence.EntityManager;
@@ -18,7 +19,7 @@ import jakarta.persistence.PersistenceContext;
  */
 @Aspect
 @Component
-public class TenantFilterAspect {
+public class TenantFilterAspect implements Ordered {
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -33,5 +34,11 @@ public class TenantFilterAspect {
         } else {
             session.disableFilter("tenantFilter");
         }
+    }
+
+    @Override
+    public int getOrder() {
+        // Run with lowest precedence (after transaction advice starts)
+        return Ordered.LOWEST_PRECEDENCE;
     }
 }

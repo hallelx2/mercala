@@ -49,6 +49,11 @@ public class RegistrationService {
         Tenant tenant = tenantRepository.findBySlug(tenantSlug)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant not found: " + tenantSlug));
 
+        java.util.UUID contextTenantId = com.mercala.platform.multitenancy.TenantContext.getCurrentTenant();
+        if (contextTenantId == null || !contextTenantId.equals(tenant.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Cross-tenant access denied");
+        }
+
         if (userRepository.existsByTenantIdAndEmail(tenant.getId(), request.email())) {
             throw new ResourceConflictException("User email already exists within tenant: " + request.email());
         }
@@ -60,8 +65,14 @@ public class RegistrationService {
 
     @Transactional(readOnly = true)
     public List<AppUser> getUsers(String tenantSlug) {
-        tenantRepository.findBySlug(tenantSlug)
+        Tenant tenant = tenantRepository.findBySlug(tenantSlug)
                 .orElseThrow(() -> new ResourceNotFoundException("Tenant not found: " + tenantSlug));
+
+        java.util.UUID contextTenantId = com.mercala.platform.multitenancy.TenantContext.getCurrentTenant();
+        if (contextTenantId == null || !contextTenantId.equals(tenant.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Cross-tenant access denied");
+        }
+
         return userRepository.findAll();
     }
 }
