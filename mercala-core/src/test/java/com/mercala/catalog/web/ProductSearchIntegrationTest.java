@@ -21,6 +21,10 @@ import com.mercala.identity.Tenant;
 import com.mercala.identity.TenantRepository;
 import com.mercala.platform.multitenancy.TenantContext;
 import com.mercala.platform.security.JwtService;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.junit.jupiter.api.Assertions.fail;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
@@ -37,6 +41,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtService jwtService;
     @Autowired private ProductService productService;
+    @Autowired private PlatformTransactionManager transactionManager;
 
     // --- Helpers -------------------------------------------------------------
 
@@ -201,5 +206,46 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                         .param("q", "comfortable footwear"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(0)));
+    }
+
+    @Test
+    void verifiesRolledBackTransactionDoesNotIndexProduct() {
+        Tenant tenant = createTenant("rollback-store");
+        String shopperToken = tokenForRole(Role.SHOPPER, tenant);
+
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        
+        try {
+            txTemplate.execute(status -> {
+                TenantContext.setCurrentTenant(tenant.getId());
+                try {
+                    productService.createProduct(new CreateProductRequest(
+                            "Invisible Shoes",
+                            "Should never be indexed",
+                            new BigDecimal("99.99"),
+                            null,
+                            List.of("shoes", "invisible"),
+                            List.of()
+                    ));
+                } finally {
+                    TenantContext.clear();
+                }
+                // Force rollback
+                status.setRollbackOnly();
+                return null;
+            });
+        } catch (Exception ignored) {
+        }
+
+        // Now verify that searching for "invisible" returns nothing (since the transaction was rolled back, the product was not saved and never indexed)
+        try {
+            mockMvc.perform(get("/api/search")
+                            .header("Authorization", shopperToken)
+                            .param("q", "invisible"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content", hasSize(0)));
+        } catch (Exception e) {
+            fail(e);
+        }
     }
 }

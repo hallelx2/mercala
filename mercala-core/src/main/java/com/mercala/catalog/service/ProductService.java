@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -18,6 +19,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.mercala.catalog.*;
+import com.mercala.catalog.events.ProductAdded;
+import com.mercala.catalog.events.ProductUpdated;
 import com.mercala.catalog.ports.EmbeddingPort;
 import com.mercala.catalog.web.dto.*;
 import com.mercala.identity.exception.ResourceConflictException;
@@ -32,6 +35,7 @@ public class ProductService {
     private final CategoryRepository categoryRepository;
     private final VariantRepository variantRepository;
     private final EmbeddingPort embeddingPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${app.search.rrf.k:60}")
     private int rrfK;
@@ -49,11 +53,13 @@ public class ProductService {
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
             VariantRepository variantRepository,
-            EmbeddingPort embeddingPort) {
+            EmbeddingPort embeddingPort,
+            ApplicationEventPublisher eventPublisher) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.variantRepository = variantRepository;
         this.embeddingPort = embeddingPort;
+        this.eventPublisher = eventPublisher;
     }
 
     // --- Category Operations ---
@@ -110,13 +116,6 @@ public class ProductService {
             product.setTags(request.tags());
         }
 
-        // Generate embedding
-        String embedText = request.name() + " " + (request.description() != null ? request.description() : "");
-        if (request.tags() != null && !request.tags().isEmpty()) {
-            embedText += " " + String.join(" ", request.tags());
-        }
-        product.setEmbedding(embeddingPort.getEmbedding(embedText));
-
         if (request.variants() != null) {
             for (CreateVariantRequest vReq : request.variants()) {
                 if (variantRepository.findBySku(vReq.sku()).isPresent()) {
@@ -128,6 +127,7 @@ public class ProductService {
         }
 
         Product saved = productRepository.save(product);
+        eventPublisher.publishEvent(new ProductAdded(saved.getId(), tenantId));
         return mapToProductResponse(saved);
     }
 
@@ -264,13 +264,6 @@ public class ProductService {
             product.setTags(new java.util.ArrayList<>());
         }
 
-        // Generate embedding
-        String embedText = request.name() + " " + (request.description() != null ? request.description() : "");
-        if (request.tags() != null && !request.tags().isEmpty()) {
-            embedText += " " + String.join(" ", request.tags());
-        }
-        product.setEmbedding(embeddingPort.getEmbedding(embedText));
-
         if (request.categoryId() != null) {
             Category category = categoryRepository.findById(request.categoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + request.categoryId()));
@@ -283,6 +276,7 @@ public class ProductService {
         }
 
         Product saved = productRepository.save(product);
+        eventPublisher.publishEvent(new ProductUpdated(saved.getId(), tenantId));
         return mapToProductResponse(saved);
     }
 
