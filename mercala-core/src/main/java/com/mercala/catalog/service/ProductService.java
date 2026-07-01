@@ -1,10 +1,17 @@
 package com.mercala.catalog.service;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -25,6 +32,18 @@ public class ProductService {
     private final CategoryRepository categoryRepository;
     private final VariantRepository variantRepository;
     private final EmbeddingPort embeddingPort;
+
+    @Value("${app.search.rrf.k:60}")
+    private int rrfK;
+
+    @Value("${app.search.rrf.lexical-weight:1.0}")
+    private double lexicalWeight;
+
+    @Value("${app.search.rrf.semantic-weight:1.0}")
+    private double semanticWeight;
+
+    @Value("${app.search.rrf.candidate-limit:50}")
+    private int candidateLimit;
 
     public ProductService(
             ProductRepository productRepository,
@@ -151,6 +170,83 @@ public class ProductService {
         
         return productRepository.searchSemantic(sb.toString(), pageable)
                 .map(this::mapToProductResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> searchHybrid(String query, Pageable pageable) {
+        getRequiredTenantId(); // Enforce active tenant context validation
+
+        if (query == null || query.trim().isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, 0);
+        }
+
+        // Fetch top lexical candidates
+        Page<Product> lexicalPage = productRepository.searchLexical(query, PageRequest.of(0, candidateLimit));
+        List<Product> lexicalList = lexicalPage.getContent();
+
+        // Fetch top semantic candidates
+        float[] queryEmbedding = embeddingPort.getEmbedding(query);
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < queryEmbedding.length; i++) {
+            sb.append(queryEmbedding[i]);
+            if (i < queryEmbedding.length - 1) {
+                sb.append(",");
+            }
+        }
+        sb.append("]");
+
+        Page<Product> semanticPage = productRepository.searchSemantic(sb.toString(), PageRequest.of(0, candidateLimit));
+        List<Product> semanticList = semanticPage.getContent();
+
+        // Compute RRF scores
+        Map<UUID, Product> productMap = new HashMap<>();
+        Map<UUID, Double> lexicalRankMap = new HashMap<>();
+        Map<UUID, Double> semanticRankMap = new HashMap<>();
+
+        for (int i = 0; i < lexicalList.size(); i++) {
+            Product p = lexicalList.get(i);
+            productMap.put(p.getId(), p);
+            lexicalRankMap.put(p.getId(), (double) (i + 1));
+        }
+
+        for (int i = 0; i < semanticList.size(); i++) {
+            Product p = semanticList.get(i);
+            productMap.put(p.getId(), p);
+            semanticRankMap.put(p.getId(), (double) (i + 1));
+        }
+
+        Map<UUID, Double> rrfScores = new HashMap<>();
+        for (UUID id : productMap.keySet()) {
+            double lexicalScore = 0.0;
+            if (lexicalRankMap.containsKey(id)) {
+                lexicalScore = lexicalWeight / (rrfK + lexicalRankMap.get(id));
+            }
+
+            double semanticScore = 0.0;
+            if (semanticRankMap.containsKey(id)) {
+                semanticScore = semanticWeight / (rrfK + semanticRankMap.get(id));
+            }
+
+            rrfScores.put(id, lexicalScore + semanticScore);
+        }
+
+        // Sort by RRF score descending
+        List<UUID> sortedIds = new ArrayList<>(rrfScores.keySet());
+        sortedIds.sort((id1, id2) -> Double.compare(rrfScores.get(id2), rrfScores.get(id1)));
+
+        // Paginate in-memory
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), sortedIds.size());
+
+        List<ProductResponse> pageContent = new ArrayList<>();
+        if (start < sortedIds.size()) {
+            for (int i = start; i < end; i++) {
+                Product product = productMap.get(sortedIds.get(i));
+                pageContent.add(mapToProductResponse(product));
+            }
+        }
+
+        return new PageImpl<>(pageContent, pageable, sortedIds.size());
     }
 
     public ProductResponse updateProduct(UUID productId, UpdateProductRequest request) {
