@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -23,6 +24,8 @@ public record UpdateProductRequest(
     BigDecimal price,
 
     UUID categoryId,
+
+    List<String> tags,
 
     @NotNull(message = "Product status is required")
     ProductStatus status

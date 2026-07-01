@@ -25,6 +25,8 @@ public record CreateProductRequest(
 
     UUID categoryId,
 
+    List<String> tags,
+
     @Valid
     List<CreateVariantRequest> variants
 ) {}

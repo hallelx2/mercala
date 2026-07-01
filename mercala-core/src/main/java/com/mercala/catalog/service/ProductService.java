@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,6 +83,9 @@ public class ProductService {
 
         Product product = new Product(tenantId, request.name(), request.description(), request.price(), category);
         product.setStatus(ProductStatus.ACTIVE);
+        if (request.tags() != null) {
+            product.setTags(request.tags());
+        }
 
         if (request.variants() != null) {
             for (CreateVariantRequest vReq : request.variants()) {
@@ -112,6 +117,13 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> searchLexical(String query, Pageable pageable) {
+        getRequiredTenantId(); // Enforce active tenant context validation
+        return productRepository.searchLexical(query, pageable)
+                .map(this::mapToProductResponse);
+    }
+
     public ProductResponse updateProduct(UUID productId, UpdateProductRequest request) {
         UUID tenantId = getRequiredTenantId();
         Product product = productRepository.findByTenantIdAndId(tenantId, productId)
@@ -121,6 +133,11 @@ public class ProductService {
         product.setDescription(request.description());
         product.setPrice(request.price());
         product.setStatus(request.status());
+        if (request.tags() != null) {
+            product.setTags(request.tags());
+        } else {
+            product.setTags(new java.util.ArrayList<>());
+        }
 
         if (request.categoryId() != null) {
             Category category = categoryRepository.findById(request.categoryId())
@@ -260,6 +277,7 @@ public class ProductService {
                 product.getStatus(),
                 product.getPrice(),
                 mapToCategoryResponse(product.getCategory()),
+                product.getTags(),
                 varResponses,
                 product.getCreatedAt(),
                 product.getUpdatedAt()
