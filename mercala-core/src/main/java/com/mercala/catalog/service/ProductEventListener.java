@@ -45,6 +45,7 @@ public class ProductEventListener {
     }
 
     private void reembedProduct(UUID productId, UUID tenantId) {
+        UUID previousTenant = TenantContext.getCurrentTenant();
         TenantContext.setCurrentTenant(tenantId);
         try {
             Product product = productRepository.findByTenantIdAndId(tenantId, productId).orElse(null);
@@ -65,7 +66,11 @@ public class ProductEventListener {
         } catch (Exception e) {
             log.error("Failed to generate embedding for product: {}", productId, e);
         } finally {
-            TenantContext.clear();
+            if (previousTenant != null) {
+                TenantContext.setCurrentTenant(previousTenant);
+            } else {
+                TenantContext.clear();
+            }
         }
     }
 }
