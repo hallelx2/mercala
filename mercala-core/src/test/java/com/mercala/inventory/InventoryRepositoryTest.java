@@ -141,41 +141,52 @@ class InventoryRepositoryTest extends AbstractIntegrationTest {
 
         // 2. Perform concurrent updates
         ExecutorService executor = Executors.newFixedThreadPool(2);
-        CountDownLatch latch = new CountDownLatch(1);
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(2);
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failureCount = new AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicReference<Throwable> unexpectedException = new java.util.concurrent.atomic.AtomicReference<>();
 
         Runnable updateTask = () -> {
             try {
-                // Wait for the latch signal to run concurrently
-                latch.await();
-                
                 transactionTemplate.execute(status -> {
                     TenantContext.setCurrentTenant(tenant.getId());
                     try {
                         StockItem item = stockItemRepository.findById(stockItemId).orElseThrow();
+                        
+                        // Synchronize here: both threads must load the entity before either updates/flushes
+                        barrier.await(5, java.util.concurrent.TimeUnit.SECONDS);
+
                         item.reserve(1); // reserve 1 unit
                         stockItemRepository.saveAndFlush(item);
                         successCount.incrementAndGet();
+                    } catch (Exception e) {
+                        // Propagate exception out of transaction block
+                        throw new RuntimeException(e);
                     } finally {
                         TenantContext.clear();
                     }
                     return null;
                 });
-            } catch (ObjectOptimisticLockingFailureException e) {
-                failureCount.incrementAndGet();
             } catch (Exception e) {
-                // other unexpected exceptions
+                Throwable cause = e.getCause();
+                if (e instanceof ObjectOptimisticLockingFailureException || cause instanceof ObjectOptimisticLockingFailureException ||
+                    e instanceof org.springframework.dao.OptimisticLockingFailureException || cause instanceof org.springframework.dao.OptimisticLockingFailureException) {
+                    failureCount.incrementAndGet();
+                } else {
+                    unexpectedException.set(e);
+                }
             }
         };
 
         executor.submit(updateTask);
         executor.submit(updateTask);
 
-        // Start threads
-        latch.countDown();
         executor.shutdown();
         executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+
+        if (unexpectedException.get() != null) {
+            throw new AssertionError("Unexpected exception in concurrent worker thread", unexpectedException.get());
+        }
 
         // One update must succeed, the other must fail due to optimistic locking (version mismatch)
         assertThat(successCount.get()).isEqualTo(1);

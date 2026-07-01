@@ -36,6 +36,10 @@ public class Cart {
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true, fetch = jakarta.persistence.FetchType.EAGER)
     private List<CartLine> lines = new ArrayList<>();
 
+    @jakarta.persistence.Version
+    @Column(nullable = false)
+    private long version = 0L;
+
     protected Cart() {}
 
     public Cart(UUID tenantId, UUID userId) {
@@ -57,6 +61,14 @@ public class Cart {
 
     public List<CartLine> getLines() {
         return lines;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public void setVersion(long version) {
+        this.version = version;
     }
 
     public Optional<CartLine> getLine(UUID variantId) {
@@ -89,5 +101,9 @@ public class Cart {
 
     public void removeLine(UUID variantId) {
         lines.removeIf(line -> line.getVariantId().equals(variantId));
+    }
+
+    public void clearLines() {
+        lines.clear();
     }
 }

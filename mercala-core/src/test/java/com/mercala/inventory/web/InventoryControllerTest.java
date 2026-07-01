@@ -39,7 +39,7 @@ class InventoryControllerTest extends AbstractIntegrationTest {
     @Autowired private JwtService jwtService;
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private ProductRepository productRepository;
-    @Autowired private StockItemRepository stockItemRepository;
+
 
     private String tokenForRole(Role role, Tenant tenant) {
         String unique = UUID.randomUUID().toString().substring(0, 8);

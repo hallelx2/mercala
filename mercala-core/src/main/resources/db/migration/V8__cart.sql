@@ -5,25 +5,24 @@ CREATE TABLE cart (
     id         UUID         PRIMARY KEY,
     tenant_id  UUID         NOT NULL,
     user_id    UUID         NOT NULL,
+    version    BIGINT       NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT uq_cart_tenant_user UNIQUE (tenant_id, user_id)
+    CONSTRAINT uq_cart_tenant_user UNIQUE (tenant_id, user_id),
+    CONSTRAINT uq_cart_id_tenant UNIQUE (id, tenant_id)
 );
 
 CREATE TABLE cart_line (
     id         UUID         PRIMARY KEY,
     tenant_id  UUID         NOT NULL,
-    cart_id    UUID         NOT NULL REFERENCES cart (id) ON DELETE CASCADE,
+    cart_id    UUID         NOT NULL,
     variant_id UUID         NOT NULL REFERENCES variant (id) ON DELETE CASCADE,
     quantity   INTEGER      NOT NULL CONSTRAINT chk_cart_line_quantity CHECK (quantity > 0),
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT uq_cart_line_cart_variant UNIQUE (cart_id, variant_id)
+    CONSTRAINT uq_cart_line_cart_variant UNIQUE (cart_id, variant_id),
+    CONSTRAINT fk_cart_line_cart_tenant FOREIGN KEY (cart_id, tenant_id) REFERENCES cart (id, tenant_id) ON DELETE CASCADE
 );
-
--- Indexes for performance
-CREATE INDEX idx_cart_tenant_user ON cart (tenant_id, user_id);
-CREATE INDEX idx_cart_line_cart_variant ON cart_line (cart_id, variant_id);
 
 -- Enable Row-Level Security (RLS) on both tables
 ALTER TABLE cart ENABLE ROW LEVEL SECURITY;
@@ -46,5 +45,5 @@ CREATE POLICY tenant_isolation_policy ON cart_line
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid);
 
--- Explicitly grant privileges to mercala_app role
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mercala_app;
+-- Explicitly grant privileges to mercala_app role on the new tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON cart, cart_line TO mercala_app;

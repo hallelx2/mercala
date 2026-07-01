@@ -54,7 +54,7 @@ public class StockItem {
     public StockItem(UUID tenantId, UUID variantId, int quantity) {
         this.tenantId = tenantId;
         this.variantId = variantId;
-        this.quantity = quantity;
+        setQuantity(quantity);
         this.reservedQuantity = 0;
     }
 
@@ -140,6 +140,9 @@ public class StockItem {
         if (quantity < 0) {
             throw new IllegalArgumentException("Quantity cannot be negative");
         }
+        if (quantity < this.reservedQuantity) {
+            throw new IllegalStateException("Quantity cannot be set lower than reserved quantity (" + this.reservedQuantity + ")");
+        }
         this.quantity = quantity;
     }
 
@@ -150,6 +153,9 @@ public class StockItem {
     public void setReservedQuantity(int reservedQuantity) {
         if (reservedQuantity < 0) {
             throw new IllegalArgumentException("Reserved quantity cannot be negative");
+        }
+        if (reservedQuantity > this.quantity) {
+            throw new IllegalStateException("Reserved quantity cannot exceed physical quantity (" + this.quantity + ")");
         }
         this.reservedQuantity = reservedQuantity;
     }

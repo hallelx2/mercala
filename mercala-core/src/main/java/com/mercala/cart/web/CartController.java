@@ -63,6 +63,7 @@ public class CartController {
     }
 
     @DeleteMapping
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void clearCart(@AuthenticationPrincipal AuthenticatedUser user) {
         cartService.clearCart(user.userId());
     }
