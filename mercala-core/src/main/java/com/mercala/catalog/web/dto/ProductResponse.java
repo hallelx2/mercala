@@ -17,6 +17,7 @@ public record ProductResponse(
     ProductStatus status,
     BigDecimal price,
     CategoryResponse category,
+    List<String> tags,
     List<VariantResponse> variants,
     Instant createdAt,
     Instant updatedAt

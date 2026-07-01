@@ -27,7 +27,8 @@ class ApiDocsTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("/api/tenants")))
                 .andExpect(content().string(containsString("/api/products")))
-                .andExpect(content().string(containsString("/api/categories")));
+                .andExpect(content().string(containsString("/api/categories")))
+                .andExpect(content().string(containsString("/api/search")));
     }
 
     @Test
