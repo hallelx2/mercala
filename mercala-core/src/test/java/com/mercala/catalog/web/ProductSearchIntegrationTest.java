@@ -137,14 +137,42 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].name").value("Blue Running Socks"));
 
-        // 5. Test Search as Tenant B Shopper
+        // 5. Test Semantic Search as Tenant A Shopper (synonyms that do not match lexically)
 
-        // Query: "shoes" -> Should match "Tenant B Running Shoes", NOT Tenant A's shoes
+        // Query: "footwear", mode=semantic -> Should match "Red Running Shoes"
+        mockMvc.perform(get("/api/search")
+                        .header("Authorization", shopperAToken)
+                        .param("q", "footwear")
+                        .param("mode", "semantic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].name").value("Red Running Shoes"));
+
+        // Query: "beverage vessel", mode=semantic -> Should match "Coffee Mug"
+        mockMvc.perform(get("/api/search")
+                        .header("Authorization", shopperAToken)
+                        .param("q", "beverage vessel")
+                        .param("mode", "semantic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].name").value("Coffee Mug"));
+
+        // 6. Test Search as Tenant B Shopper
+
+        // Query: "shoes" (lexical) -> Should match "Tenant B Running Shoes", NOT Tenant A's shoes
         mockMvc.perform(get("/api/search")
                         .header("Authorization", shopperBToken)
                         .param("q", "shoes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].name").value("Tenant B Running Shoes"));
+
+        // Query: "footwear", mode=semantic -> Should NOT match Tenant A's shoes (tenant-isolated!)
+        mockMvc.perform(get("/api/search")
+                        .header("Authorization", shopperBToken)
+                        .param("q", "footwear")
+                        .param("mode", "semantic"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(0)));
     }
 }

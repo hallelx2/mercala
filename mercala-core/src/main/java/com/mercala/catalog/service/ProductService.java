@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.mercala.catalog.*;
+import com.mercala.catalog.ports.EmbeddingPort;
 import com.mercala.catalog.web.dto.*;
 import com.mercala.identity.exception.ResourceConflictException;
 import com.mercala.identity.exception.ResourceNotFoundException;
@@ -23,14 +24,17 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final VariantRepository variantRepository;
+    private final EmbeddingPort embeddingPort;
 
     public ProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
-            VariantRepository variantRepository) {
+            VariantRepository variantRepository,
+            EmbeddingPort embeddingPort) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.variantRepository = variantRepository;
+        this.embeddingPort = embeddingPort;
     }
 
     // --- Category Operations ---
@@ -87,6 +91,13 @@ public class ProductService {
             product.setTags(request.tags());
         }
 
+        // Generate embedding
+        String embedText = request.name() + " " + (request.description() != null ? request.description() : "");
+        if (request.tags() != null && !request.tags().isEmpty()) {
+            embedText += " " + String.join(" ", request.tags());
+        }
+        product.setEmbedding(embeddingPort.getEmbedding(embedText));
+
         if (request.variants() != null) {
             for (CreateVariantRequest vReq : request.variants()) {
                 if (variantRepository.findBySku(vReq.sku()).isPresent()) {
@@ -124,6 +135,24 @@ public class ProductService {
                 .map(this::mapToProductResponse);
     }
 
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> searchSemantic(String query, Pageable pageable) {
+        getRequiredTenantId(); // Enforce active tenant context validation
+        float[] queryEmbedding = embeddingPort.getEmbedding(query);
+        
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < queryEmbedding.length; i++) {
+            sb.append(queryEmbedding[i]);
+            if (i < queryEmbedding.length - 1) {
+                sb.append(",");
+            }
+        }
+        sb.append("]");
+        
+        return productRepository.searchSemantic(sb.toString(), pageable)
+                .map(this::mapToProductResponse);
+    }
+
     public ProductResponse updateProduct(UUID productId, UpdateProductRequest request) {
         UUID tenantId = getRequiredTenantId();
         Product product = productRepository.findByTenantIdAndId(tenantId, productId)
@@ -138,6 +167,13 @@ public class ProductService {
         } else {
             product.setTags(new java.util.ArrayList<>());
         }
+
+        // Generate embedding
+        String embedText = request.name() + " " + (request.description() != null ? request.description() : "");
+        if (request.tags() != null && !request.tags().isEmpty()) {
+            embedText += " " + String.join(" ", request.tags());
+        }
+        product.setEmbedding(embeddingPort.getEmbedding(embedText));
 
         if (request.categoryId() != null) {
             Category category = categoryRepository.findById(request.categoryId())
