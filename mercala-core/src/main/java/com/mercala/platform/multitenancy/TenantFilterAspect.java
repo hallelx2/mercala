@@ -34,6 +34,14 @@ public class TenantFilterAspect implements Ordered {
         } else {
             session.disableFilter("tenantFilter");
         }
+
+        // Set the transaction-scoped tenant context parameter in PostgreSQL for RLS
+        session.doWork(connection -> {
+            try (var stmt = connection.prepareStatement("SELECT set_config('app.current_tenant', ?, true)")) {
+                stmt.setString(1, tenantId != null ? tenantId.toString() : "");
+                stmt.execute();
+            }
+        });
     }
 
     @Override

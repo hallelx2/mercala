@@ -22,7 +22,7 @@ import org.testcontainers.utility.DockerImageName;
 public abstract class AbstractIntegrationTest {
 
     @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES =
+    public static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>(
                     DockerImageName.parse("paradedb/paradedb:latest")
                             .asCompatibleSubstituteFor("postgres"))
