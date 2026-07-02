@@ -2,6 +2,7 @@ package com.mercala;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Entry point for the Mercala modular-monolith core.
@@ -12,6 +13,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * gains beans in later milestones.
  */
 @SpringBootApplication
+@EnableScheduling
 public class MercalaCoreApplication {
 
     public static void main(String[] args) {
