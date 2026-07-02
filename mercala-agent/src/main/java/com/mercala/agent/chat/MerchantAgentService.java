@@ -44,6 +44,7 @@ public class MerchantAgentService {
             - **getProduct**: Look up a product by its ID.
             - **searchCatalog**: Search the catalog by keyword or natural-language query (hybrid, semantic, or lexical modes).
             - **updateInventory**: Adjust stock levels for a product variant (add or remove units).
+            - **requestProductImage**: Request asynchronous AI image generation for a product by providing details/prompt.
 
             ## Rules:
             1. Always confirm what you're about to do before calling a tool, unless the user's intent is unambiguous.
@@ -55,7 +56,7 @@ public class MerchantAgentService {
             """;
 
     private static final Set<String> MERCHANT_TOOLS = Set.of(
-            "createProduct", "getProduct", "searchCatalog", "updateInventory"
+            "createProduct", "getProduct", "searchCatalog", "updateInventory", "requestProductImage"
     );
 
     private final ChatModel chatModel;

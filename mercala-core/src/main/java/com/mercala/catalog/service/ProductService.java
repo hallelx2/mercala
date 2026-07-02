@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -30,6 +32,8 @@ import com.mercala.platform.multitenancy.TenantContext;
 @Service
 @Transactional
 public class ProductService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductService.class);
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -385,6 +389,15 @@ public class ProductService {
                 variant.getCreatedAt(),
                 variant.getUpdatedAt()
         );
+    }
+
+    public void updateEmbedding(UUID productId, float[] embedding) {
+        UUID tenantId = getRequiredTenantId();
+        Product product = productRepository.findByTenantIdAndId(tenantId, productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+        product.setEmbedding(embedding);
+        productRepository.save(product);
+        log.info("Successfully updated embedding via updateEmbedding endpoint for product: {}", productId);
     }
 
     private ProductResponse mapToProductResponse(Product product) {

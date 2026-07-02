@@ -56,4 +56,11 @@ public final class ToolPayloads {
     public record GetProductArgs(
             String productId
     ) {}
+
+    // ── RequestProductImage ────────────────────────────────────────
+
+    public record RequestProductImageArgs(
+            String productId,
+            String prompt
+    ) {}
 }
