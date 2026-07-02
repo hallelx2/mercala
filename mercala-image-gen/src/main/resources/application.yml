@@ -23,6 +23,10 @@ mercala:
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${MINIO_SECRET_KEY:minioadmin}
     bucket: ${MINIO_BUCKET:mercala-images}
+  kafka:
+    product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
+    image-requests-topic: ${MERCALA_KAFKA_IMAGE_REQUESTS_TOPIC:image.requests}
+    image-results-topic: ${MERCALA_KAFKA_IMAGE_RESULTS_TOPIC:image.results}
 
 management:
   endpoints:

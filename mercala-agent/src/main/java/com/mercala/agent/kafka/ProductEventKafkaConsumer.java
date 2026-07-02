@@ -34,7 +34,7 @@ public class ProductEventKafkaConsumer {
         this.coreClient = coreClient;
     }
 
-    @KafkaListener(topics = "product.events", groupId = "mercala-agent-group")
+    @KafkaListener(topics = "${mercala.kafka.product-events-topic:product.events}", groupId = "mercala-agent-group")
     public void consumeProductEvent(ProductEvent event) {
         log.info("Received Kafka ProductEvent: productId={}, tenantId={}, type={}",
                 event.productId(), event.tenantId(), event.eventType());
