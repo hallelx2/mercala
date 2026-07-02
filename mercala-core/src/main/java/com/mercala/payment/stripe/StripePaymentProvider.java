@@ -68,7 +68,9 @@ public class StripePaymentProvider implements PaymentProvider {
         }
 
         String secretKey = resolveSecretKey(tenantId);
-        RequestOptions options = getRequestOptions(tenantId, secretKey);
+        RequestOptions options = getRequestOptions(tenantId, secretKey).toBuilder()
+                .setIdempotencyKey(request.idempotencyKey())
+                .build();
 
         if (isMockMode(secretKey)) {
             log.info("[MOCK] Initializing Stripe Checkout session for order: {}, amount: {}", request.orderId(), request.amount());
@@ -102,7 +104,16 @@ public class StripePaymentProvider implements PaymentProvider {
                     .putMetadata("tenant_id", tenantId.toString())
                     .build();
 
-            Session session = Session.create(params, options);
+            Session session = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> {
+                        try {
+                            return Session.create(params, options);
+                        } catch (com.stripe.exception.StripeException e) {
+                            throw new RuntimeException(e);
+                        }
+                    },
+                    3, 100, 2.0
+            );
             return PaymentResponse.pending(session.getId(), session.getUrl());
         } catch (Exception e) {
             log.error("Stripe Checkout session creation failed for order: {}", request.orderId(), e);
@@ -126,7 +137,16 @@ public class StripePaymentProvider implements PaymentProvider {
         }
 
         try {
-            Session session = Session.retrieve(transactionReference, options);
+            Session session = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> {
+                        try {
+                            return Session.retrieve(transactionReference, options);
+                        } catch (com.stripe.exception.StripeException e) {
+                            throw new RuntimeException(e);
+                        }
+                    },
+                    3, 100, 2.0
+            );
             if ("paid".equals(session.getPaymentStatus())) {
                 return PaymentResponse.successful(session.getId(), session.toJson());
             } else {
@@ -153,7 +173,9 @@ public class StripePaymentProvider implements PaymentProvider {
         }
 
         String secretKey = resolveSecretKey(tenantId);
-        RequestOptions options = getRequestOptions(tenantId, secretKey);
+        RequestOptions options = getRequestOptions(tenantId, secretKey).toBuilder()
+                .setIdempotencyKey(request.paymentId().toString())
+                .build();
 
         if (isMockMode(secretKey)) {
             log.info("[MOCK] Refunding Stripe payment reference: {}, amount: {}", request.providerReference(), request.amount());
@@ -166,7 +188,16 @@ public class StripePaymentProvider implements PaymentProvider {
                     .setAmount(request.amount().multiply(BigDecimal.valueOf(100)).longValue())
                     .build();
 
-            Refund refund = Refund.create(params, options);
+            com.stripe.model.Refund refund = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> {
+                        try {
+                            return com.stripe.model.Refund.create(params, options);
+                        } catch (com.stripe.exception.StripeException e) {
+                            throw new RuntimeException(e);
+                        }
+                    },
+                    3, 100, 2.0
+            );
             return RefundResponse.successful(refund.getId());
         } catch (Exception e) {
             log.error("Stripe Refund creation failed for payment reference: {}", request.providerReference(), e);
