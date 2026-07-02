@@ -26,18 +26,26 @@ public class ProductEventKafkaConsumer {
 
     private final EmbeddingModel embeddingModel;
     private final MercalaCoreClient coreClient;
+    private final InMemoryIdempotencyRegistry idempotencyRegistry;
 
     public ProductEventKafkaConsumer(
             @Autowired(required = false) EmbeddingModel embeddingModel,
-            MercalaCoreClient coreClient) {
+            MercalaCoreClient coreClient,
+            InMemoryIdempotencyRegistry idempotencyRegistry) {
         this.embeddingModel = embeddingModel;
         this.coreClient = coreClient;
+        this.idempotencyRegistry = idempotencyRegistry;
     }
 
     @KafkaListener(topics = "${mercala.kafka.product-events-topic:product.events}", groupId = "mercala-agent-group")
     public void consumeProductEvent(ProductEvent event) {
-        log.info("Received Kafka ProductEvent: productId={}, tenantId={}, type={}",
-                event.productId(), event.tenantId(), event.eventType());
+        log.info("Received Kafka ProductEvent: eventId={}, productId={}, tenantId={}, type={}",
+                event.eventId(), event.productId(), event.tenantId(), event.eventType());
+
+        if (idempotencyRegistry.isDuplicate(event.eventId())) {
+            log.info("Duplicate event ignored: eventId={}", event.eventId());
+            return;
+        }
 
         if ("DELETED".equalsIgnoreCase(event.eventType())) {
             log.info("Product deletion event received, skipping re-embedding");

@@ -20,15 +20,18 @@ public class ImageRequestKafkaConsumer {
     private final ImageProvider imageProvider;
     private final StorageService storageService;
     private final ImageResultProducer imageResultProducer;
+    private final InMemoryIdempotencyRegistry idempotencyRegistry;
     private final List<ImageRequestEvent> receivedEvents = Collections.synchronizedList(new ArrayList<>());
 
     public ImageRequestKafkaConsumer(
             ImageProvider imageProvider,
             StorageService storageService,
-            ImageResultProducer imageResultProducer) {
+            ImageResultProducer imageResultProducer,
+            InMemoryIdempotencyRegistry idempotencyRegistry) {
         this.imageProvider = imageProvider;
         this.storageService = storageService;
         this.imageResultProducer = imageResultProducer;
+        this.idempotencyRegistry = idempotencyRegistry;
     }
 
     @KafkaListener(
@@ -36,8 +39,14 @@ public class ImageRequestKafkaConsumer {
             groupId = "${spring.kafka.consumer.group-id:mercala-image-gen-group}"
     )
     public void consume(ImageRequestEvent event) {
-        log.info("Received image request event: productId={}, tenantId={}, prompt='{}'",
-                event.productId(), event.tenantId(), event.prompt());
+        log.info("Received image request event: eventId={}, productId={}, tenantId={}, prompt='{}'",
+                event.eventId(), event.productId(), event.tenantId(), event.prompt());
+
+        if (idempotencyRegistry.isDuplicate(event.eventId())) {
+            log.info("Duplicate event ignored: eventId={}", event.eventId());
+            return;
+        }
+
         receivedEvents.add(event);
 
         try {
