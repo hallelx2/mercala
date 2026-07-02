@@ -24,16 +24,19 @@ public class CheckoutService {
     private final CartService cartService;
     private final InventoryService inventoryService;
     private final VariantRepository variantRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public CheckoutService(
             OrderRepository orderRepository,
             CartService cartService,
             InventoryService inventoryService,
-            VariantRepository variantRepository) {
+            VariantRepository variantRepository,
+            org.springframework.context.ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.cartService = cartService;
         this.inventoryService = inventoryService;
         this.variantRepository = variantRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     public Order checkout(UUID userId, String idempotencyKey) {
@@ -77,12 +80,7 @@ public class CheckoutService {
             totalAmount = totalAmount.add(lineTotal);
         }
 
-        // 5. Reserve stock in inventory
-        for (CartLine line : cart.getLines()) {
-            inventoryService.reserveStock(line.getVariantId(), line.getQuantity());
-        }
-
-        // 6. Create Order
+        // 5. Create Order
         Order order = new Order(tenantId, userId, totalAmount, idempotencyKey);
         for (CartLine line : cart.getLines()) {
             Variant variant = variantMap.get(line.getVariantId());
@@ -91,8 +89,8 @@ public class CheckoutService {
 
         Order savedOrder = orderRepository.save(order);
 
-        // 7. Clear cart
-        cartService.clearCart(userId);
+        // 6. Publish event for post-commit processing (stock reservation, cart clearing)
+        eventPublisher.publishEvent(new com.mercala.order.event.OrderPlacedEvent(savedOrder.getId(), userId, tenantId));
 
         return savedOrder;
     }
