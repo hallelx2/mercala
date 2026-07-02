@@ -4,6 +4,8 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,17 +19,16 @@ import com.mercala.catalog.events.ProductUpdated;
 import com.mercala.catalog.ports.EmbeddingPort;
 import com.mercala.contracts.event.ProductEvent;
 import com.mercala.platform.multitenancy.TenantContext;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.mercala.platform.outbox.OutboxEventService;
 
 @Component
 public class ProductEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(ProductEventListener.class);
+
     private final ProductRepository productRepository;
     private final EmbeddingPort embeddingPort;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxEventService outboxEventService;
     private final String productEventsTopic;
 
     @Value("${mercala.kafka.enabled:false}")
@@ -36,11 +37,11 @@ public class ProductEventListener {
     public ProductEventListener(
             ProductRepository productRepository,
             EmbeddingPort embeddingPort,
-            @Autowired(required = false) KafkaTemplate<String, Object> kafkaTemplate,
+            @Autowired(required = false) OutboxEventService outboxEventService,
             @Value("${mercala.kafka.product-events-topic:product.events}") String productEventsTopic) {
         this.productRepository = productRepository;
         this.embeddingPort = embeddingPort;
-        this.kafkaTemplate = kafkaTemplate;
+        this.outboxEventService = outboxEventService;
         this.productEventsTopic = productEventsTopic;
     }
 
@@ -48,7 +49,7 @@ public class ProductEventListener {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handleProductAdded(ProductAdded event) {
         log.info("Handling ProductAdded event for product: {}", event.productId());
-        publishToKafka(event.productId(), event.tenantId(), "ADDED");
+        enqueueOutboxEvent(event.productId(), event.tenantId(), "ADDED");
         reembedProduct(event.productId(), event.tenantId());
     }
 
@@ -56,25 +57,36 @@ public class ProductEventListener {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handleProductUpdated(ProductUpdated event) {
         log.info("Handling ProductUpdated event for product: {}", event.productId());
-        publishToKafka(event.productId(), event.tenantId(), "UPDATED");
+        enqueueOutboxEvent(event.productId(), event.tenantId(), "UPDATED");
         reembedProduct(event.productId(), event.tenantId());
     }
 
-    private void publishToKafka(UUID productId, UUID tenantId, String eventType) {
+    /**
+     * Enqueues the product event into the outbox table within the current transaction.
+     * The OutboxRelay will pick it up and publish to Kafka asynchronously.
+     */
+    private void enqueueOutboxEvent(UUID productId, UUID tenantId, String eventType) {
         if (!kafkaEnabled) {
-            log.debug("Kafka publishing is disabled, skipping message send");
+            log.debug("Kafka publishing is disabled, skipping outbox enqueue");
             return;
         }
-        if (kafkaTemplate != null) {
+        if (outboxEventService != null) {
             try {
                 ProductEvent productEvent = new ProductEvent(productId, tenantId, eventType);
-                kafkaTemplate.send(productEventsTopic, productId.toString(), productEvent);
-                log.info("Successfully published {} event to Kafka topic {} for product {}", eventType, productEventsTopic, productId);
+                outboxEventService.enqueue(
+                        "Product",
+                        productId,
+                        tenantId,
+                        eventType,
+                        productEventsTopic,
+                        productEvent
+                );
+                log.info("Enqueued {} outbox event for product {}", eventType, productId);
             } catch (Exception e) {
-                log.error("Failed to publish {} event to Kafka for product {}", eventType, productId, e);
+                log.error("Failed to enqueue {} outbox event for product {}", eventType, productId, e);
             }
         } else {
-            log.debug("KafkaTemplate not autowired, skipping publishing to {}", productEventsTopic);
+            log.debug("OutboxEventService not available, skipping outbox enqueue");
         }
     }
 

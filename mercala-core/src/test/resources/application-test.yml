@@ -4,3 +4,14 @@ mercala:
   jwt:
     secret: test-only-secret-not-used-anywhere-real-0123456789abcdef
     expiration-seconds: 3600
+  kafka:
+    enabled: false
+
+# Prevent Kafka admin client from blocking on startup
+spring:
+  kafka:
+    admin:
+      fail-fast: false
+      properties:
+        request.timeout.ms: 1000
+        default.api.timeout.ms: 1000
