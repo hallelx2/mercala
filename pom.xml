@@ -30,6 +30,7 @@
         <module>mercala-contracts</module>
         <module>mercala-core</module>
         <module>mercala-agent</module>
+        <module>mercala-image-gen</module>
     </modules>
 
     <dependencyManagement>
