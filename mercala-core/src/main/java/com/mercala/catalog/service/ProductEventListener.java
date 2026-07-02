@@ -25,11 +25,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 public class ProductEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(ProductEventListener.class);
-    private static final String PRODUCT_EVENTS_TOPIC = "product.events";
-
     private final ProductRepository productRepository;
     private final EmbeddingPort embeddingPort;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final String productEventsTopic;
 
     @Value("${mercala.kafka.enabled:false}")
     private boolean kafkaEnabled;
@@ -37,10 +36,12 @@ public class ProductEventListener {
     public ProductEventListener(
             ProductRepository productRepository,
             EmbeddingPort embeddingPort,
-            @Autowired(required = false) KafkaTemplate<String, Object> kafkaTemplate) {
+            @Autowired(required = false) KafkaTemplate<String, Object> kafkaTemplate,
+            @Value("${mercala.kafka.product-events-topic:product.events}") String productEventsTopic) {
         this.productRepository = productRepository;
         this.embeddingPort = embeddingPort;
         this.kafkaTemplate = kafkaTemplate;
+        this.productEventsTopic = productEventsTopic;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -67,13 +68,13 @@ public class ProductEventListener {
         if (kafkaTemplate != null) {
             try {
                 ProductEvent productEvent = new ProductEvent(productId, tenantId, eventType);
-                kafkaTemplate.send(PRODUCT_EVENTS_TOPIC, productId.toString(), productEvent);
-                log.info("Successfully published {} event to Kafka topic {} for product {}", eventType, PRODUCT_EVENTS_TOPIC, productId);
+                kafkaTemplate.send(productEventsTopic, productId.toString(), productEvent);
+                log.info("Successfully published {} event to Kafka topic {} for product {}", eventType, productEventsTopic, productId);
             } catch (Exception e) {
                 log.error("Failed to publish {} event to Kafka for product {}", eventType, productId, e);
             }
         } else {
-            log.debug("KafkaTemplate not autowired, skipping publishing to {}", PRODUCT_EVENTS_TOPIC);
+            log.debug("KafkaTemplate not autowired, skipping publishing to {}", productEventsTopic);
         }
     }
 

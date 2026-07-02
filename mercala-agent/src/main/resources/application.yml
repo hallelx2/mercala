@@ -24,6 +24,12 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
+mercala:
+  kafka:
+    product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
+    image-requests-topic: ${MERCALA_KAFKA_IMAGE_REQUESTS_TOPIC:image.requests}
+    image-results-topic: ${MERCALA_KAFKA_IMAGE_RESULTS_TOPIC:image.results}
+
 management:
   endpoints:
     web:
