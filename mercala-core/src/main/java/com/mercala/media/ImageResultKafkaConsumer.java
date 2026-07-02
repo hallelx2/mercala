@@ -18,9 +18,13 @@ public class ImageResultKafkaConsumer {
     private static final Logger log = LoggerFactory.getLogger(ImageResultKafkaConsumer.class);
 
     private final ProductImageRepository productImageRepository;
+    private final com.mercala.platform.idempotency.IdempotentConsumerService idempotentConsumerService;
 
-    public ImageResultKafkaConsumer(ProductImageRepository productImageRepository) {
+    public ImageResultKafkaConsumer(
+            ProductImageRepository productImageRepository,
+            com.mercala.platform.idempotency.IdempotentConsumerService idempotentConsumerService) {
         this.productImageRepository = productImageRepository;
+        this.idempotentConsumerService = idempotentConsumerService;
     }
 
     @KafkaListener(
@@ -29,8 +33,13 @@ public class ImageResultKafkaConsumer {
     )
     @Transactional
     public void consume(ImageResultEvent event) {
-        log.info("Received image result event: productId={}, tenantId={}, imageUrl='{}'",
-                event.productId(), event.tenantId(), event.imageUrl());
+        log.info("Received image result event: eventId={}, productId={}, tenantId={}, imageUrl='{}'",
+                event.eventId(), event.productId(), event.tenantId(), event.imageUrl());
+
+        if (idempotentConsumerService.checkAndRecord(event.eventId())) {
+            log.info("Duplicate event ignored: eventId={}", event.eventId());
+            return;
+        }
 
         UUID previousTenant = TenantContext.getCurrentTenant();
         TenantContext.setCurrentTenant(event.tenantId());

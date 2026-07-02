@@ -28,4 +28,22 @@ public class KafkaTopicConfig {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    public NewTopic productEventsDltTopic(
+            @Value("${mercala.kafka.product-events-topic:product.events}") String topicName) {
+        return TopicBuilder.name(topicName + ".DLT")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic imageResultsDltTopic(
+            @Value("${mercala.kafka.image-results-topic:image.results}") String topicName) {
+        return TopicBuilder.name(topicName + ".DLT")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }
