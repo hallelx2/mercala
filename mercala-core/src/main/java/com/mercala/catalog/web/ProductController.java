@@ -88,4 +88,14 @@ public class ProductController {
     public void deleteVariant(@PathVariable UUID productId, @PathVariable UUID variantId) {
         productService.deleteVariant(productId, variantId);
     }
+
+    @PutMapping("/{id}/embedding")
+    @PreAuthorize("hasRole('MERCHANT_OWNER') or hasRole('MERCHANT_STAFF') or hasRole('SHOPPER') or isAuthenticated()")
+    public void updateEmbedding(@PathVariable UUID id, @RequestBody List<Double> embedding) {
+        float[] vector = new float[embedding.size()];
+        for (int i = 0; i < embedding.size(); i++) {
+            vector[i] = embedding.get(i).floatValue();
+        }
+        productService.updateEmbedding(id, vector);
+    }
 }
