@@ -36,7 +36,7 @@ public class Order {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private OrderStatus status = OrderStatus.PENDING;
+    private OrderStatus status = OrderStatus.PLACED;
 
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalAmount;
@@ -72,8 +72,22 @@ public class Order {
         return status;
     }
 
-    public void setStatus(OrderStatus status) {
-        this.status = status;
+    public void transitionTo(OrderStatus newStatus) {
+        if (!isValidTransition(this.status, newStatus)) {
+            throw new IllegalStateException("Illegal status transition from " + this.status + " to " + newStatus);
+        }
+        this.status = newStatus;
+    }
+
+    private boolean isValidTransition(OrderStatus current, OrderStatus next) {
+        if (current == next) {
+            return true;
+        }
+        return switch (current) {
+            case PLACED -> next == OrderStatus.PAID || next == OrderStatus.CANCELLED;
+            case PAID -> next == OrderStatus.FULFILLED || next == OrderStatus.CANCELLED;
+            case FULFILLED, CANCELLED -> false;
+        };
     }
 
     public BigDecimal getTotalAmount() {

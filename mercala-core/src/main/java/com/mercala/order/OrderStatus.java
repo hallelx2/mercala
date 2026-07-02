@@ -1,8 +1,8 @@
 package com.mercala.order;
 
 public enum OrderStatus {
-    PENDING,
+    PLACED,
     PAID,
-    SHIPPED,
+    FULFILLED,
     CANCELLED
 }

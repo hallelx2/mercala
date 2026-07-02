@@ -108,7 +108,7 @@ class CheckoutControllerTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(checkoutJson))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.status").value("PLACED"))
                 .andExpect(jsonPath("$.totalAmount").value(199.98))
                 .andExpect(jsonPath("$.idempotencyKey").value(idempotencyKey))
                 .andExpect(jsonPath("$.lines[0].variantId").value(variant.getId().toString()))
