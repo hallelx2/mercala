@@ -65,4 +65,22 @@ public class OrderEventListener {
             TenantContext.clear();
         }
     }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void handlePaymentCaptured(com.mercala.payment.event.PaymentCapturedEvent event) {
+        log.info("Handling PaymentCapturedEvent for order: {} in tenant: {}", event.orderId(), event.tenantId());
+
+        TenantContext.setCurrentTenant(event.tenantId());
+        try {
+            Order order = orderRepository.findById(event.orderId())
+                    .orElseThrow(() -> new IllegalStateException("Order not found: " + event.orderId()));
+
+            order.transitionTo(OrderStatus.PAID);
+            orderRepository.save(order);
+            log.info("Successfully marked order: {} as PAID", event.orderId());
+        } finally {
+            TenantContext.clear();
+        }
+    }
 }
