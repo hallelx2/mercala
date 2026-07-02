@@ -16,17 +16,22 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestTemplate;
 
+import com.mercala.agent.chat.AgentContext;
 import com.mercala.agent.tool.ToolPayloads.*;
 
 /**
  * Spring AI tool/function definitions for the Mercala agent.
  * Each @Bean produces a Function that Spring AI registers as a callable tool.
  * The agent resolves which to invoke based on the user's natural-language request.
+ *
+ * All calls are tenant-scoped: the X-Tenant-ID header is injected from the
+ * AgentContext ThreadLocal set by the MerchantAgentService before each chat turn.
  */
 @Configuration
 public class CatalogTools {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogTools.class);
+    private static final String TENANT_HEADER = "X-Tenant-ID";
 
     @Value("${mercala.core.base-url:http://localhost:8080}")
     private String coreBaseUrl;
@@ -37,14 +42,20 @@ public class CatalogTools {
         this.restTemplate = new RestTemplate();
     }
 
-    // ── Helper: build headers with JWT token ────────────────────────
+    // ── Helper: build headers with tenant context ───────────────────
 
-    private HttpHeaders buildHeaders(String token) {
+    private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        if (token != null && !token.isBlank()) {
-            headers.setBearerAuth(token);
+
+        // Inject tenant ID from the AgentContext ThreadLocal
+        try {
+            AgentContext ctx = AgentContext.current();
+            headers.set(TENANT_HEADER, ctx.tenantId().toString());
+        } catch (IllegalStateException e) {
+            log.warn("AgentContext not available — tool call will proceed without tenant header");
         }
+
         return headers;
     }
 
@@ -75,7 +86,7 @@ public class CatalogTools {
                 body.put("variants", variantMaps);
             }
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, buildHeaders(null));
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, buildHeaders());
             String url = coreBaseUrl + "/api/products";
 
             @SuppressWarnings("unchecked")
@@ -94,7 +105,7 @@ public class CatalogTools {
             log.info("Tool: getProduct invoked — productId={}", args.productId());
 
             String url = coreBaseUrl + "/api/products/" + args.productId();
-            HttpEntity<Void> entity = new HttpEntity<>(buildHeaders(null));
+            HttpEntity<Void> entity = new HttpEntity<>(buildHeaders());
 
             @SuppressWarnings("unchecked")
             Map<String, Object> result = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class).getBody();
@@ -119,7 +130,7 @@ public class CatalogTools {
                     java.net.URLEncoder.encode(args.query(), java.nio.charset.StandardCharsets.UTF_8),
                     args.mode(), args.page(), args.size());
 
-            HttpEntity<Void> entity = new HttpEntity<>(buildHeaders(null));
+            HttpEntity<Void> entity = new HttpEntity<>(buildHeaders());
 
             @SuppressWarnings("unchecked")
             Map<String, Object> result = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class).getBody();
@@ -140,7 +151,7 @@ public class CatalogTools {
             log.info("Tool: updateInventory invoked — variantId={}, quantity={}", args.variantId(), args.quantity());
 
             Map<String, Object> body = Map.of("quantity", args.quantity());
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, buildHeaders(null));
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, buildHeaders());
             String url = coreBaseUrl + "/api/inventory/" + args.variantId() + "/adjust";
 
             @SuppressWarnings("unchecked")
