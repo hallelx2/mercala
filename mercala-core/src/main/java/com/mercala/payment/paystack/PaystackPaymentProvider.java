@@ -106,7 +106,10 @@ public class PaystackPaymentProvider implements PaymentProvider {
 
             String url = "https://api.paystack.co/transaction/initialize";
             @SuppressWarnings("rawtypes")
-            java.util.Map response = restTemplate.postForObject(url, entity, java.util.Map.class);
+            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> restTemplate.postForObject(url, entity, java.util.Map.class),
+                    3, 100, 2.0
+            );
 
             if (response != null && Boolean.TRUE.equals(response.get("status"))) {
                 @SuppressWarnings("unchecked")
@@ -145,7 +148,10 @@ public class PaystackPaymentProvider implements PaymentProvider {
 
             String url = "https://api.paystack.co/transaction/verify/" + transactionReference;
             @SuppressWarnings("rawtypes")
-            java.util.Map response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, java.util.Map.class).getBody();
+            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, java.util.Map.class).getBody(),
+                    3, 100, 2.0
+            );
 
             if (response != null && Boolean.TRUE.equals(response.get("status"))) {
                 @SuppressWarnings("unchecked")
@@ -206,7 +212,10 @@ public class PaystackPaymentProvider implements PaymentProvider {
 
             String url = "https://api.paystack.co/refund";
             @SuppressWarnings("rawtypes")
-            java.util.Map response = restTemplate.postForObject(url, entity, java.util.Map.class);
+            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> restTemplate.postForObject(url, entity, java.util.Map.class),
+                    3, 100, 2.0
+            );
 
             if (response != null && Boolean.TRUE.equals(response.get("status"))) {
                 @SuppressWarnings("unchecked")

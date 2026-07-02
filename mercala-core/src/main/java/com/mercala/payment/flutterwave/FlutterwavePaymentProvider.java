@@ -111,7 +111,10 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
 
             String url = "https://api.flutterwave.com/v3/payments";
             @SuppressWarnings("rawtypes")
-            java.util.Map response = restTemplate.postForObject(url, entity, java.util.Map.class);
+            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> restTemplate.postForObject(url, entity, java.util.Map.class),
+                    3, 100, 2.0
+            );
 
             if (response != null && "success".equals(response.get("status"))) {
                 @SuppressWarnings("unchecked")
@@ -149,7 +152,10 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
 
             String url = "https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=" + transactionReference;
             @SuppressWarnings("rawtypes")
-            java.util.Map response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, java.util.Map.class).getBody();
+            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, java.util.Map.class).getBody(),
+                    3, 100, 2.0
+            );
 
             if (response != null && "success".equals(response.get("status"))) {
                 @SuppressWarnings("unchecked")
@@ -207,7 +213,10 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
 
             String url = "https://api.flutterwave.com/v3/transactions/" + request.providerReference() + "/refund";
             @SuppressWarnings("rawtypes")
-            java.util.Map response = restTemplate.postForObject(url, entity, java.util.Map.class);
+            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                    () -> restTemplate.postForObject(url, entity, java.util.Map.class),
+                    3, 100, 2.0
+            );
 
             if (response != null && "success".equals(response.get("status"))) {
                 @SuppressWarnings("unchecked")
