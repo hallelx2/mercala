@@ -37,6 +37,9 @@ public class Tenant {
     @Column(nullable = false, length = 32)
     private TenantStatus status = TenantStatus.ACTIVE;
 
+    @Column(name = "region", nullable = false, length = 8)
+    private String region = "US";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -50,13 +53,26 @@ public class Tenant {
     }
 
     public Tenant(String slug, String name) {
+        this(slug, name, "US");
+    }
+
+    public Tenant(String slug, String name, String region) {
         this.slug = slug;
         this.name = name;
+        this.region = region;
         this.status = TenantStatus.ACTIVE;
     }
 
     public UUID getId() {
         return id;
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
     }
 
     public String getSlug() {
