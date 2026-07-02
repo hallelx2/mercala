@@ -31,7 +31,11 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(properties = {
     "spring.ai.openai.image.enabled=false",
     "spring.ai.openai.api-key=dummy",
-    "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}"
+    "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
+    "mercala.storage.endpoint=http://localhost:9000",
+    "mercala.storage.access-key=dummy",
+    "mercala.storage.secret-key=dummy",
+    "mercala.storage.bucket=dummy"
 })
 @ActiveProfiles("test")
 @EmbeddedKafka(partitions = 1, topics = { "image.requests", "image.results" })
@@ -97,5 +101,34 @@ class ImageRequestKafkaConsumerTest {
             assertEquals(tenantId, resultEvent.tenantId());
             assertEquals(mockUrl, resultEvent.imageUrl());
         });
+    }
+
+    @Test
+    void consumesImageRequestAndHandlesFailuresGracefully() {
+        UUID productId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        String prompt = "Create a premium leather wallet image";
+
+        // Mock generator failure
+        when(imageProvider.generateImage(eq(prompt))).thenThrow(new RuntimeException("AI service unavailable"));
+
+        // Send request event
+        ImageRequestEvent requestEvent = new ImageRequestEvent(productId, tenantId, prompt);
+        kafkaTemplate.send("image.requests", productId.toString(), requestEvent);
+
+        // Verify consumer received the event
+        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            List<ImageRequestEvent> receivedRequests = consumer.getReceivedEvents();
+            assertFalse(receivedRequests.isEmpty(), "Consumer should have received the request event");
+            assertEquals(productId, receivedRequests.get(0).productId());
+        });
+
+        // Sleep briefly to ensure no event is sent to results
+        try {
+            Thread.sleep(1500);
+        } catch (InterruptedException ignored) {}
+
+        // Assert that result events remains empty
+        assertEquals(0, receivedResultEvents.size(), "No result event should be published when image generation fails");
     }
 }

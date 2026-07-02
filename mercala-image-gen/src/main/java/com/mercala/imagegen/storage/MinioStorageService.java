@@ -27,10 +27,10 @@ public class MinioStorageService implements StorageService {
     private MinioClient minioClient;
 
     public MinioStorageService(
-            @Value("${mercala.storage.endpoint:http://localhost:9000}") String endpoint,
-            @Value("${mercala.storage.access-key:minioadmin}") String accessKey,
-            @Value("${mercala.storage.secret-key:minioadmin}") String secretKey,
-            @Value("${mercala.storage.bucket:mercala-images}") String bucket) {
+            @Value("${mercala.storage.endpoint}") String endpoint,
+            @Value("${mercala.storage.access-key}") String accessKey,
+            @Value("${mercala.storage.secret-key}") String secretKey,
+            @Value("${mercala.storage.bucket}") String bucket) {
         this.endpoint = endpoint;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
@@ -55,27 +55,28 @@ public class MinioStorageService implements StorageService {
                 minioClient.makeBucket(
                         MakeBucketArgs.builder().bucket(bucket).build()
                 );
-                
-                // Set public policy so uploaded images are readable by shoppers/browsers
-                String policyJson = """
-                        {
-                          "Version": "2012-10-17",
-                          "Statement": [
-                            {
-                              "Effect": "Allow",
-                              "Principal": {"AWS": ["*"]},
-                              "Action": ["s3:GetObject"],
-                              "Resource": ["arn:aws:s3:::%s/*"]
-                            }
-                          ]
-                        }
-                        """.formatted(bucket);
-                minioClient.setBucketPolicy(
-                        SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
-                );
             }
+
+            // Always ensure the public policy is applied
+            String policyJson = """
+                    {
+                      "Version": "2012-10-17",
+                      "Statement": [
+                        {
+                          "Effect": "Allow",
+                          "Principal": {"AWS": ["*"]},
+                          "Action": ["s3:GetObject"],
+                          "Resource": ["arn:aws:s3:::%s/*"]
+                        }
+                      ]
+                    }
+                    """.formatted(bucket);
+            minioClient.setBucketPolicy(
+                    SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
+            );
         } catch (Exception e) {
             log.error("Failed to initialize MinIO Client / bucket policy", e);
+            throw new RuntimeException("MinioStorageService initialization failed", e);
         }
     }
 

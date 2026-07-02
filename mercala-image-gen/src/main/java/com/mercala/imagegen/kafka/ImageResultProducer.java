@@ -35,6 +35,13 @@ public class ImageResultProducer {
         ImageResultEvent event = new ImageResultEvent(productId, tenantId, imageUrl);
         log.info("Publishing image result event: topic={}, productId={}, tenantId={}, imageUrl='{}'",
                 topic, productId, tenantId, imageUrl);
-        kafkaTemplate.send(topic, productId.toString(), event);
+        kafkaTemplate.send(topic, productId.toString(), event)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("Failed to publish image result event to topic={} for productId={}", topic, productId, ex);
+                    } else {
+                        log.debug("Successfully published image result event to topic={} for productId={}", topic, productId);
+                    }
+                });
     }
 }

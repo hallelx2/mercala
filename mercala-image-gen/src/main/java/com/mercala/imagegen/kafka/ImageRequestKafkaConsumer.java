@@ -54,6 +54,7 @@ public class ImageRequestKafkaConsumer {
             imageResultProducer.publishImageResult(event.productId(), event.tenantId(), imageUrl);
         } catch (Exception e) {
             log.error("Failed to complete image generation lifecycle for productId={}", event.productId(), e);
+            throw new RuntimeException("Error processing image request for product: " + event.productId(), e);
         }
     }
 
