@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers("/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/tenants").permitAll()   // public store signup
+                        .requestMatchers("/api/webhooks/**").permitAll()                // public webhooks
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->                     // 401 (not logged in)
