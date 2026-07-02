@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @SpringBootTest(properties = {
+    "spring.ai.openai.image.enabled=false",
+    "spring.ai.openai.api-key=dummy",
     "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}"
 })
 @ActiveProfiles("test")
