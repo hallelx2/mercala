@@ -23,14 +23,22 @@ public class ShopperChatController {
     private static final Logger log = LoggerFactory.getLogger(ShopperChatController.class);
 
     private final ShopperAgentService agentService;
+    private final com.mercala.agent.security.AgentGuardrailService guardrailService;
 
-    public ShopperChatController(ShopperAgentService agentService) {
+    public ShopperChatController(
+            ShopperAgentService agentService,
+            com.mercala.agent.security.AgentGuardrailService guardrailService) {
         this.agentService = agentService;
+        this.guardrailService = guardrailService;
     }
 
     @PostMapping("/chat")
     public ResponseEntity<ChatResponse> chat(@Valid @RequestBody ChatRequest request) {
         log.info("POST /api/agent/shopper/chat — tenant={}", request.tenantId());
+
+        // Enforce security guardrails
+        guardrailService.checkRateLimit(request.userId());
+        guardrailService.scanPrompt(request.message());
 
         ChatResponse response = agentService.chat(request);
 
