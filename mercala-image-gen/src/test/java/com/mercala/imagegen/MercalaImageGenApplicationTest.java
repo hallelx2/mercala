@@ -4,7 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "spring.ai.openai.image.enabled=false",
+    "spring.ai.openai.api-key=dummy"
+})
 @ActiveProfiles("test")
 class MercalaImageGenApplicationTest {
 
