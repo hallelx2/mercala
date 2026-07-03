@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  db:
+    image: paradedb/paradedb:latest
+    environment:
+      POSTGRES_USER: {{ db_user }}
+      POSTGRES_PASSWORD: {{ db_password }}
+      POSTGRES_DB: {{ db_name }}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: always
+
+  kafka:
+    image: apache/kafka:latest
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /tmp/kafka-logs
+      # Strict JVM heap limit for cheap instance
+      KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
+    volumes:
+      - kafkadata:/tmp/kafka-logs
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - core
+      - agent
+      - image-gen
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: always
+
+  core:
+    image: {{ ecr_core_url }}:latest
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/{{ db_name }}
+      SPRING_DATASOURCE_USERNAME: {{ db_user }}
+      SPRING_DATASOURCE_PASSWORD: {{ db_password }}
+      SPRING_FLYWAY_USERNAME: {{ db_user }}
+      SPRING_FLYWAY_PASSWORD: {{ db_password }}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MERCALA_JWT_SECRET: {{ jwt_secret }}
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+    depends_on:
+      - db
+      - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: always
+
+  agent:
+    image: {{ ecr_agent_url }}:latest
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_AI_OPENAI_API_KEY: {{ openai_api_key }}
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+    depends_on:
+      - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: always
+
+  image-gen:
+    image: {{ ecr_image_gen_url }}:latest
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_AI_OPENAI_API_KEY: {{ openai_api_key }}
+      MINIO_ENDPOINT: {{ s3_endpoint }}
+      MINIO_ACCESS_KEY: {{ aws_access_key_id }}
+      MINIO_SECRET_KEY: {{ aws_secret_access_key }}
+      MINIO_BUCKET: {{ s3_bucket_name }}
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+    depends_on:
+      - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: always
+
+volumes:
+  pgdata:
+  kafkadata:

@@ -1,0 +1,149 @@
+---
+- name: Deploy Mercala Stack to Cheap Single-Node AWS Instance
+  hosts: all
+  become: yes
+  vars:
+    db_name: mercala
+    db_user: mercala_app
+    # These variables are passed dynamically via ansible-playbook arguments
+    db_password: "{{ db_password_env }}"
+    jwt_secret: "{{ jwt_secret_env }}"
+    openai_api_key: "{{ openai_api_key_env }}"
+    s3_bucket_name: "{{ s3_bucket_name_env }}"
+    s3_endpoint: "https://s3.{{ aws_region }}.amazonaws.com"
+    aws_access_key_id: "{{ aws_access_key_id_env }}"
+    aws_secret_access_key: "{{ aws_secret_access_key_env }}"
+    ecr_core_url: "{{ ecr_core_url_env }}"
+    ecr_agent_url: "{{ ecr_agent_url_env }}"
+    ecr_image_gen_url: "{{ ecr_image_gen_url_env }}"
+    aws_region: "us-east-1"
+
+  tasks:
+    - name: Update apt repository cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - unzip
+        state: present
+
+    - name: Check if Swap file exists
+      stat:
+        path: /swapfile
+      register: swap_file_check
+
+    - name: Create 2GB Swap file for memory safety
+      command: "{{ item }}"
+      with_items:
+        - fallocate -l 2G /swapfile
+        - chmod 600 /swapfile
+        - mkswap /swapfile
+        - swapon /swapfile
+      when: not swap_file_check.stat.exists
+
+    - name: Persist Swap file in /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "/swapfile swap swap defaults 0 0"
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker APT repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker Engine & Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Start and enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Install AWS CLI
+      unarchive:
+        src: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp
+        remote_src: yes
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Run AWS CLI installation script
+      command: /tmp/aws/install
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Authenticate Docker with AWS ECR
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ ecr_core_url.split('/')[0] }}
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
+        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
+
+    - name: Create application deployment directory
+      file:
+        path: /opt/mercala
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Write Nginx configuration file
+      template:
+        src: templates/nginx.conf.j2
+        dest: /opt/mercala/nginx.conf
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+
+    - name: Write docker-compose.yml file
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: /opt/mercala/docker-compose.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+
+    - name: Pull latest Docker images
+      command: docker compose pull
+      args:
+        chdir: /opt/mercala
+
+    - name: Deploy and start application containers
+      command: docker compose up -d --remove-orphans
+      args:
+        chdir: /opt/mercala
+
+    - name: Set up daily database backup cron job
+      cron:
+        name: "Backup Postgres DB to S3"
+        minute: "0"
+        hour: "2"
+        job: >
+          docker exec -t $(docker ps -qf "name=db") pg_dump -U {{ db_user }} {{ db_name }} | 
+          gzip | 
+          aws s3 cp - s3://{{ s3_bucket_name }}/backups/db-backup-$(date +\%F).sql.gz
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
+        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
