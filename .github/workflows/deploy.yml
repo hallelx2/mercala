@@ -1,0 +1,154 @@
+name: Build & Deploy to Cheap AWS Spot Host
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build & Test Java App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests=false
+
+      # Upload built jars for deployment jobs to reuse
+      - name: Upload mercala-core Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-jar
+          path: mercala-core/target/mercala-core-*.jar
+
+      - name: Upload mercala-agent Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-jar
+          path: mercala-agent/target/mercala-agent-*.jar
+
+      - name: Upload mercala-image-gen Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-gen-jar
+          path: mercala-image-gen/target/mercala-image-gen-*.jar
+
+  provision-and-deploy:
+    name: Provision & Deploy
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Retrieve the compiled JARS
+      - name: Download core-jar
+        uses: actions/download-artifact@v4
+        with:
+          name: core-jar
+          path: mercala-core/target/
+
+      - name: Download agent-jar
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-jar
+          path: mercala-agent/target/
+
+      - name: Download image-gen-jar
+        uses: actions/download-artifact@v4
+        with:
+          name: image-gen-jar
+          path: mercala-image-gen/target/
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Log in to AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build and push ECR images
+      - name: Build and Push Core Image
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/mercala-core:latest -t ${{ steps.login-ecr.outputs.registry }}/mercala-core:${{ github.sha }} ./mercala-core
+          docker push ${{ steps.login-ecr.outputs.registry }}/mercala-core --all-tags
+
+      - name: Build and Push Agent Image
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/mercala-agent:latest -t ${{ steps.login-ecr.outputs.registry }}/mercala-agent:${{ github.sha }} ./mercala-agent
+          docker push ${{ steps.login-ecr.outputs.registry }}/mercala-agent --all-tags
+
+      - name: Build and Push Image-Gen Image
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/mercala-image-gen:latest -t ${{ steps.login-ecr.outputs.registry }}/mercala-image-gen:${{ github.sha }} ./mercala-image-gen
+          docker push ${{ steps.login-ecr.outputs.registry }}/mercala-image-gen --all-tags
+
+      # Terraform Provisioning
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: devops/terraform
+
+      - name: Terraform Apply
+        id: terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="ssh_key_name=mercala-deploy-key"
+        working-directory: devops/terraform
+
+      # Capture Terraform outputs
+      - name: Fetch Outputs
+        id: tf-outputs
+        run: |
+          echo "public_ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
+          echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
+        working-directory: devops/terraform
+
+      # Ansible Configuration & Deployment
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+
+      - name: Set up SSH Private Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/mercala-deploy-key.pem
+          chmod 600 ~/.ssh/mercala-deploy-key.pem
+
+      - name: Run Ansible Playbook
+        run: |
+          ansible-playbook -i "${{ steps.tf-outputs.outputs.public_ip }}," devops/ansible/playbook.yml \
+            --private-key=~/.ssh/mercala-deploy-key.pem \
+            --ssh-common-args="-o StrictHostKeyChecking=no" \
+            --extra-vars "db_password_env='${{ secrets.DB_PASSWORD }}' \
+                          jwt_secret_env='${{ secrets.JWT_SECRET }}' \
+                          openai_api_key_env='${{ secrets.OPENAI_API_KEY }}' \
+                          s3_bucket_name_env='${{ steps.tf-outputs.outputs.s3_bucket_name }}' \
+                          aws_access_key_id_env='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+                          aws_secret_access_key_env='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
+                          ecr_core_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-core' \
+                          ecr_agent_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-agent' \
+                          ecr_image_gen_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-image-gen'"
