@@ -36,3 +36,29 @@ management:
   endpoint:
     health:
       show-details: always
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 5s
+    instances:
+      openai-image:
+        baseConfig: default
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+    instances:
+      openai-image:
+        baseConfig: default
+

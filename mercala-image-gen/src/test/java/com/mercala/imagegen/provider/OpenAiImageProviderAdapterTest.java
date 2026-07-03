@@ -19,7 +19,10 @@ class OpenAiImageProviderAdapterTest {
     @Test
     void generatesImageFromBase64Json() {
         ImageModel mockImageModel = Mockito.mock(ImageModel.class);
-        OpenAiImageProviderAdapter adapter = new OpenAiImageProviderAdapter(java.util.Optional.of(mockImageModel));
+        OpenAiImageProviderAdapter adapter = new OpenAiImageProviderAdapter(
+                java.util.Optional.of(mockImageModel),
+                java.util.Optional.empty(),
+                java.util.Optional.empty());
 
         String originalData = "test-image-data-payload";
         String encodedData = Base64.getEncoder().encodeToString(originalData.getBytes());
@@ -38,7 +41,10 @@ class OpenAiImageProviderAdapterTest {
     @Test
     void fallsBackToMockImageWhenImageModelThrows() {
         ImageModel mockImageModel = Mockito.mock(ImageModel.class);
-        OpenAiImageProviderAdapter adapter = new OpenAiImageProviderAdapter(java.util.Optional.of(mockImageModel));
+        OpenAiImageProviderAdapter adapter = new OpenAiImageProviderAdapter(
+                java.util.Optional.of(mockImageModel),
+                java.util.Optional.empty(),
+                java.util.Optional.empty());
 
         when(mockImageModel.call(any(ImagePrompt.class))).thenThrow(new RuntimeException("OpenAI API Down"));
 
@@ -49,7 +55,10 @@ class OpenAiImageProviderAdapterTest {
 
     @Test
     void fallsBackToMockImageWhenImageModelIsNull() {
-        OpenAiImageProviderAdapter adapter = new OpenAiImageProviderAdapter(java.util.Optional.empty());
+        OpenAiImageProviderAdapter adapter = new OpenAiImageProviderAdapter(
+                java.util.Optional.empty(),
+                java.util.Optional.empty(),
+                java.util.Optional.empty());
 
         byte[] result = adapter.generateImage("Generate a red box");
         assertNotNull(result);

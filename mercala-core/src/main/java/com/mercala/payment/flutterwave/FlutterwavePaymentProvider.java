@@ -21,6 +21,9 @@ import com.mercala.payment.RefundRequest;
 import com.mercala.payment.RefundResponse;
 import com.mercala.platform.multitenancy.TenantContext;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+
 @Component("flutterwavePaymentProvider")
 public class FlutterwavePaymentProvider implements PaymentProvider {
 
@@ -72,6 +75,8 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
     }
 
     @Override
+    @CircuitBreaker(name = "flutterwave-payment", fallbackMethod = "fallbackInitialize")
+    @Retry(name = "flutterwave-payment")
     public PaymentResponse initializePayment(PaymentRequest request) {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null) {
@@ -87,51 +92,48 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
             return PaymentResponse.pending(mockReference, mockCheckoutUrl);
         }
 
-        try {
-            String email = getShopperEmail(request.orderId());
+        String email = getShopperEmail(request.orderId());
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(secretKey);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(secretKey);
 
-            java.util.Map<String, Object> customer = new java.util.HashMap<>();
-            customer.put("email", email);
-            customer.put("name", "Customer " + email.split("@")[0]);
+        java.util.Map<String, Object> customer = new java.util.HashMap<>();
+        customer.put("email", email);
+        customer.put("name", "Customer " + email.split("@")[0]);
 
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
-            body.put("tx_ref", request.idempotencyKey());
-            body.put("amount", request.amount().doubleValue());
-            body.put("currency", request.currency().toUpperCase());
-            body.put("redirect_url", request.returnUrl());
-            body.put("customer", customer);
-            body.put("meta", java.util.Map.of("order_id", request.orderId().toString(), "tenant_id", tenantId.toString()));
-            body.put("customizations", java.util.Map.of("title", "Mercala Shop Payment"));
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("tx_ref", request.idempotencyKey());
+        body.put("amount", request.amount().doubleValue());
+        body.put("currency", request.currency().toUpperCase());
+        body.put("redirect_url", request.returnUrl());
+        body.put("customer", customer);
+        body.put("meta", java.util.Map.of("order_id", request.orderId().toString(), "tenant_id", tenantId.toString()));
+        body.put("customizations", java.util.Map.of("title", "Mercala Shop Payment"));
 
-            HttpEntity<java.util.Map<String, Object>> entity = new HttpEntity<>(body, headers);
+        HttpEntity<java.util.Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-            String url = "https://api.flutterwave.com/v3/payments";
-            @SuppressWarnings("rawtypes")
-            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
-                    () -> restTemplate.postForObject(url, entity, java.util.Map.class),
-                    3, 100, 2.0
-            );
+        String url = "https://api.flutterwave.com/v3/payments";
+        @SuppressWarnings("rawtypes")
+        java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                () -> restTemplate.postForObject(url, entity, java.util.Map.class),
+                3, 100, 2.0
+        );
 
-            if (response != null && "success".equals(response.get("status"))) {
-                @SuppressWarnings("unchecked")
-                java.util.Map<String, Object> data = (java.util.Map<String, Object>) response.get("data");
-                String checkoutUrl = (String) data.get("link");
-                return PaymentResponse.pending(request.idempotencyKey(), checkoutUrl);
-            } else {
-                String errMsg = response != null ? (String) response.get("message") : "Empty response from Flutterwave";
-                return PaymentResponse.failed(errMsg);
-            }
-        } catch (Exception e) {
-            log.error("Flutterwave transaction initialization failed for order: {}", request.orderId(), e);
-            return PaymentResponse.failed(e.getMessage());
+        if (response != null && "success".equals(response.get("status"))) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> data = (java.util.Map<String, Object>) response.get("data");
+            String checkoutUrl = (String) data.get("link");
+            return PaymentResponse.pending(request.idempotencyKey(), checkoutUrl);
+        } else {
+            String errMsg = response != null ? (String) response.get("message") : "Empty response from Flutterwave";
+            return PaymentResponse.failed(errMsg);
         }
     }
 
     @Override
+    @CircuitBreaker(name = "flutterwave-payment", fallbackMethod = "fallbackVerify")
+    @Retry(name = "flutterwave-payment")
     public PaymentResponse verifyPayment(String transactionReference) {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null) {
@@ -145,23 +147,23 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
             return PaymentResponse.successful(transactionReference, "{\"mock\": true, \"status\": \"successful\"}");
         }
 
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(secretKey);
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(secretKey);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            String url = "https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=" + transactionReference;
-            @SuppressWarnings("rawtypes")
-            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
-                    () -> restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, java.util.Map.class).getBody(),
-                    3, 100, 2.0
-            );
+        String url = "https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=" + transactionReference;
+        @SuppressWarnings("rawtypes")
+        java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                () -> restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, java.util.Map.class).getBody(),
+                3, 100, 2.0
+        );
 
-            if (response != null && "success".equals(response.get("status"))) {
-                @SuppressWarnings("unchecked")
-                java.util.Map<String, Object> data = (java.util.Map<String, Object>) response.get("data");
-                String status = (String) data.get("status");
-                
+        if (response != null && "success".equals(response.get("status"))) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> data = (java.util.Map<String, Object>) response.get("data");
+            String status = (String) data.get("status");
+            
+            try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 String rawJson = mapper.writeValueAsString(response);
 
@@ -177,17 +179,18 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
                             null
                     );
                 }
-            } else {
-                String errMsg = response != null ? (String) response.get("message") : "Empty verification response";
-                return PaymentResponse.failed(errMsg);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize verify response", e);
             }
-        } catch (Exception e) {
-            log.error("Flutterwave transaction verification failed for reference: {}", transactionReference, e);
-            return PaymentResponse.failed(e.getMessage());
+        } else {
+            String errMsg = response != null ? (String) response.get("message") : "Empty verification response";
+            return PaymentResponse.failed(errMsg);
         }
     }
 
     @Override
+    @CircuitBreaker(name = "flutterwave-payment", fallbackMethod = "fallbackRefund")
+    @Retry(name = "flutterwave-payment")
     public RefundResponse refundPayment(RefundRequest request) {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null) {
@@ -201,35 +204,48 @@ public class FlutterwavePaymentProvider implements PaymentProvider {
             return RefundResponse.successful("re_mock_flw_" + UUID.randomUUID());
         }
 
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(secretKey);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(secretKey);
 
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
-            body.put("amount", request.amount().doubleValue());
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("amount", request.amount().doubleValue());
 
-            HttpEntity<java.util.Map<String, Object>> entity = new HttpEntity<>(body, headers);
+        HttpEntity<java.util.Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-            String url = "https://api.flutterwave.com/v3/transactions/" + request.providerReference() + "/refund";
-            @SuppressWarnings("rawtypes")
-            java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
-                    () -> restTemplate.postForObject(url, entity, java.util.Map.class),
-                    3, 100, 2.0
-            );
+        String url = "https://api.flutterwave.com/v3/transactions/" + request.providerReference() + "/refund";
+        @SuppressWarnings("rawtypes")
+        java.util.Map response = com.mercala.payment.resilience.PaymentRetryTemplate.execute(
+                () -> restTemplate.postForObject(url, entity, java.util.Map.class),
+                3, 100, 2.0
+        );
 
-            if (response != null && "success".equals(response.get("status"))) {
-                @SuppressWarnings("unchecked")
-                java.util.Map<String, Object> data = (java.util.Map<String, Object>) response.get("data");
-                String refundReference = String.valueOf(data.get("id"));
-                return RefundResponse.successful(refundReference);
-            } else {
-                String errMsg = response != null ? (String) response.get("message") : "Failed to refund transaction";
-                return RefundResponse.failed(errMsg);
-            }
-        } catch (Exception e) {
-            log.error("Flutterwave refund failed for reference: {}", request.providerReference(), e);
-            return RefundResponse.failed(e.getMessage());
+        if (response != null && "success".equals(response.get("status"))) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> data = (java.util.Map<String, Object>) response.get("data");
+            String refundReference = String.valueOf(data.get("id"));
+            return RefundResponse.successful(refundReference);
+        } else {
+            String errMsg = response != null ? (String) response.get("message") : "Failed to refund transaction";
+            return RefundResponse.failed(errMsg);
         }
+    }
+
+    /**
+     * Fallbacks for Flutterwave payment provider operations.
+     */
+    public PaymentResponse fallbackInitialize(PaymentRequest request, Throwable t) {
+        log.error("Flutterwave payment initialization failed or circuit is open. Fallback triggered. Error: {}", t.getMessage());
+        return PaymentResponse.failed("Flutterwave service temporarily unavailable: " + t.getMessage());
+    }
+
+    public PaymentResponse fallbackVerify(String transactionReference, Throwable t) {
+        log.error("Flutterwave payment verification failed or circuit is open. Fallback triggered. Error: {}", t.getMessage());
+        return PaymentResponse.failed("Flutterwave verification service temporarily unavailable: " + t.getMessage());
+    }
+
+    public RefundResponse fallbackRefund(RefundRequest request, Throwable t) {
+        log.error("Flutterwave refund failed or circuit is open. Fallback triggered. Error: {}", t.getMessage());
+        return RefundResponse.failed("Flutterwave refund service temporarily unavailable: " + t.getMessage());
     }
 }
