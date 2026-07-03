@@ -50,12 +50,15 @@ public class OutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "correlation_id", length = 255)
+    private String correlationId;
+
     protected OutboxEvent() {
         // JPA
     }
 
     public OutboxEvent(UUID id, String aggregateType, UUID aggregateId, UUID tenantId,
-                       String eventType, String topic, String payload, Instant createdAt) {
+                       String eventType, String topic, String payload, Instant createdAt, String correlationId) {
         this.id = id;
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;
@@ -64,6 +67,7 @@ public class OutboxEvent {
         this.topic = topic;
         this.payload = payload;
         this.createdAt = createdAt;
+        this.correlationId = correlationId;
     }
 
     public UUID getId() { return id; }
@@ -83,6 +87,8 @@ public class OutboxEvent {
     public Instant getCreatedAt() { return createdAt; }
 
     public Instant getPublishedAt() { return publishedAt; }
+
+    public String getCorrelationId() { return correlationId; }
 
     public void markPublished() {
         this.publishedAt = Instant.now();

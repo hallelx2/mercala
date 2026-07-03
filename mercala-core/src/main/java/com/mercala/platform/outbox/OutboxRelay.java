@@ -59,6 +59,9 @@ public class OutboxRelay {
                                 event.getPayload()
                         );
                 record.headers().add("tenant_id", event.getTenantId().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                if (event.getCorrelationId() != null) {
+                    record.headers().add("correlation_id", event.getCorrelationId().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
                 kafkaTemplate.send(record);
 
                 event.markPublished();

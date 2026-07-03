@@ -65,6 +65,7 @@ class ProductEventKafkaConsumerTest {
     void consumesProductEventAndGeneratesEmbedding() throws Exception {
         UUID productId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
+        String testCorrelationId = "correlation-id-test-agent";
 
         // Mock getting product data from core Client
         Map<String, Object> productMock = Map.of(
@@ -74,7 +75,10 @@ class ProductEventKafkaConsumerTest {
                 "description", "Premium summer wear",
                 "tags", List.of("shirt", "linen")
         );
-        when(coreClient.getProduct(productId)).thenReturn(productMock);
+        when(coreClient.getProduct(productId)).thenAnswer(invocation -> {
+            org.junit.jupiter.api.Assertions.assertEquals(testCorrelationId, org.slf4j.MDC.get("correlation_id"));
+            return productMock;
+        });
 
         // Mock embedding generation
         float[] expectedVector = new float[]{0.1f, -0.2f, 0.5f};
@@ -89,6 +93,7 @@ class ProductEventKafkaConsumerTest {
                         event
                 );
         record.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        record.headers().add("correlation_id", testCorrelationId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         kafkaTemplate.send(record);
 
         // Verify consumer fetched product, generated embedding, and updated core
