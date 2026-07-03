@@ -82,7 +82,14 @@ class ProductEventKafkaConsumerTest {
 
         // Send ProductEvent to Kafka
         ProductEvent event = new ProductEvent(productId, tenantId, "ADDED");
-        kafkaTemplate.send("product.events", productId.toString(), event);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "product.events",
+                        productId.toString(),
+                        event
+                );
+        record.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record);
 
         // Verify consumer fetched product, generated embedding, and updated core
         verify(coreClient, timeout(5000)).getProduct(productId);

@@ -52,11 +52,14 @@ public class OutboxRelay {
 
         for (OutboxEvent event : unpublished) {
             try {
-                kafkaTemplate.send(
-                        event.getTopic(),
-                        event.getAggregateId().toString(),
-                        event.getPayload()
-                );
+                org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
+                        new org.apache.kafka.clients.producer.ProducerRecord<>(
+                                event.getTopic(),
+                                event.getAggregateId().toString(),
+                                event.getPayload()
+                        );
+                record.headers().add("tenant_id", event.getTenantId().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                kafkaTemplate.send(record);
 
                 event.markPublished();
                 outboxEventRepository.save(event);

@@ -84,7 +84,14 @@ class ImageRequestKafkaConsumerTest {
 
         // Send request event
         ImageRequestEvent requestEvent = new ImageRequestEvent(productId, tenantId, prompt);
-        kafkaTemplate.send("image.requests", productId.toString(), requestEvent);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record1 =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "image.requests",
+                        productId.toString(),
+                        requestEvent
+                );
+        record1.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record1);
 
         // 1. Verify consumer received the event
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -114,7 +121,14 @@ class ImageRequestKafkaConsumerTest {
 
         // Send request event
         ImageRequestEvent requestEvent = new ImageRequestEvent(productId, tenantId, prompt);
-        kafkaTemplate.send("image.requests", productId.toString(), requestEvent);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record2 =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "image.requests",
+                        productId.toString(),
+                        requestEvent
+                );
+        record2.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record2);
 
         // Verify consumer received the event
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {

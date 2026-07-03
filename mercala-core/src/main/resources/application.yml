@@ -26,6 +26,8 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      idle-event-interval: 500
 
   flyway:
     enabled: true

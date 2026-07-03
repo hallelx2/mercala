@@ -38,9 +38,17 @@ public class ProductEventKafkaConsumer {
     }
 
     @KafkaListener(topics = "${mercala.kafka.product-events-topic:product.events}", groupId = "mercala-agent-group")
-    public void consumeProductEvent(ProductEvent event) {
+    public void consumeProductEvent(
+            ProductEvent event,
+            @org.springframework.messaging.handler.annotation.Header("tenant_id") byte[] tenantIdBytes) {
         log.info("Received Kafka ProductEvent: eventId={}, productId={}, tenantId={}, type={}",
                 event.eventId(), event.productId(), event.tenantId(), event.eventType());
+
+        // Validate tenant_id header matches event tenantId
+        String headerTenantId = new String(tenantIdBytes, java.nio.charset.StandardCharsets.UTF_8);
+        if (!event.tenantId().toString().equals(headerTenantId)) {
+            throw new IllegalArgumentException("Tenant ID mismatch: header=" + headerTenantId + ", event=" + event.tenantId());
+        }
 
         if (idempotencyRegistry.isDuplicate(event.eventId())) {
             log.info("Duplicate event ignored: eventId={}", event.eventId());

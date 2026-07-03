@@ -90,7 +90,14 @@ class ImageResultIdempotencyAndDltTest extends AbstractIntegrationTest {
         ImageResultEvent event2 = new ImageResultEvent(eventId, productId, tenantId, "http://localhost:9000/mercala-images/bag-dup.png");
 
         // Send first event
-        kafkaTemplate.send("image.results", productId.toString(), event1);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record1 =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "image.results",
+                        productId.toString(),
+                        event1
+                );
+        record1.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record1);
 
         // Await database write
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
@@ -105,7 +112,14 @@ class ImageResultIdempotencyAndDltTest extends AbstractIntegrationTest {
         });
 
         // Send second event (duplicate eventId, but different url)
-        kafkaTemplate.send("image.results", productId.toString(), event2);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record2 =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "image.results",
+                        productId.toString(),
+                        event2
+                );
+        record2.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record2);
 
         // Wait another 2 seconds and verify that the duplicate was ignored (number of images is still 1)
         try {
@@ -131,7 +145,14 @@ class ImageResultIdempotencyAndDltTest extends AbstractIntegrationTest {
         UUID eventId = UUID.randomUUID();
 
         ImageResultEvent failingEvent = new ImageResultEvent(eventId, nonExistentProductId, tenantId, "http://localhost/poison.png");
-        kafkaTemplate.send("image.results", nonExistentProductId.toString(), failingEvent);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "image.results",
+                        nonExistentProductId.toString(),
+                        failingEvent
+                );
+        record.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record);
 
         // Poll from DLT consumer to verify message is routed to DLT
         ConsumerRecord<String, Object> dltRecord = KafkaTestUtils.getSingleRecord(dltConsumer, "image.results.DLT", java.time.Duration.ofMillis(15000));

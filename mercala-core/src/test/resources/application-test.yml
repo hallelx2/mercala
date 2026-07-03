@@ -15,3 +15,5 @@ spring:
       properties:
         request.timeout.ms: 1000
         default.api.timeout.ms: 1000
+    listener:
+      idle-event-interval: 500

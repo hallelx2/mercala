@@ -52,7 +52,14 @@ class ImageResultKafkaConsumerTest extends AbstractIntegrationTest {
         String imageUrl = "http://localhost:9000/mercala-images/image.png";
 
         ImageResultEvent event = new ImageResultEvent(productId, tenantId, imageUrl);
-        kafkaTemplate.send("image.results", productId.toString(), event);
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
+                new org.apache.kafka.clients.producer.ProducerRecord<>(
+                        "image.results",
+                        productId.toString(),
+                        event
+                );
+        record.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        kafkaTemplate.send(record);
 
         // Await database write under tenant context
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
