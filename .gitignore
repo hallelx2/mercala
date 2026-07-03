@@ -45,3 +45,13 @@ Thumbs.db
 
 # Build / runtime
 logs/
+
+# Terraform
+devops/terraform/.terraform/
+devops/terraform/.terraform.lock.hcl
+devops/terraform/terraform.tfstate*
+
+# DevOps secrets (never commit)
+devops/*.pem
+devops/deploy-compose.yml
+devops/deploy.sh
