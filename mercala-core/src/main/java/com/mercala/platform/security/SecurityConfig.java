@@ -43,7 +43,8 @@ public class SecurityConfig {
                         .requestMatchers("/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/tenants").permitAll()   // public store signup
-                        .requestMatchers("/api/webhooks/**").permitAll()                // public webhooks
+                        .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/webhooks/**")).permitAll()                // public webhooks
+                        .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/media/**")).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->                     // 401 (not logged in)

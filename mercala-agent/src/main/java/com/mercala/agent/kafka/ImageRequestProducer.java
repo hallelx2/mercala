@@ -38,7 +38,14 @@ public class ImageRequestProducer {
 
         try {
             ImageRequestEvent event = new ImageRequestEvent(productId, tenantId, prompt);
-            kafkaTemplate.send(imageRequestsTopic, productId.toString(), event);
+            org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
+                    new org.apache.kafka.clients.producer.ProducerRecord<>(
+                            imageRequestsTopic,
+                            productId.toString(),
+                            event
+                    );
+            record.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            kafkaTemplate.send(record);
             log.info("Successfully published image request event to Kafka topic {}", imageRequestsTopic);
         } catch (Exception e) {
             log.error("Failed to publish image request event to Kafka", e);

@@ -38,9 +38,17 @@ public class ImageRequestKafkaConsumer {
             topics = "${mercala.kafka.image-requests-topic:image.requests}",
             groupId = "${spring.kafka.consumer.group-id:mercala-image-gen-group}"
     )
-    public void consume(ImageRequestEvent event) {
+    public void consume(
+            ImageRequestEvent event,
+            @org.springframework.messaging.handler.annotation.Header("tenant_id") byte[] tenantIdBytes) {
         log.info("Received image request event: eventId={}, productId={}, tenantId={}, prompt='{}'",
                 event.eventId(), event.productId(), event.tenantId(), event.prompt());
+
+        // Validate tenant_id header matches event tenantId
+        String headerTenantId = new String(tenantIdBytes, java.nio.charset.StandardCharsets.UTF_8);
+        if (!event.tenantId().toString().equals(headerTenantId)) {
+            throw new IllegalArgumentException("Tenant ID mismatch: header=" + headerTenantId + ", event=" + event.tenantId());
+        }
 
         if (idempotencyRegistry.isDuplicate(event.eventId())) {
             log.info("Duplicate event ignored: eventId={}", event.eventId());
