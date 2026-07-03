@@ -73,44 +73,52 @@ public class ImageResultKafkaConsumer implements ConsumerSeekAware {
             groupId = "${spring.kafka.consumer.group-id:mercala-core-group}"
     )
     @Transactional
-    public void consume(ImageResultEvent event, @Header("tenant_id") byte[] tenantIdBytes) {
-        log.info("Received image result event: eventId={}, productId={}, tenantId={}, imageUrl='{}'",
-                event.eventId(), event.productId(), event.tenantId(), event.imageUrl());
-
-        if (pendingReplay && seekCallback != null && !assignedPartitions.isEmpty()) {
-            log.info("Executing deferred replay seek on consumer thread during consume processing");
-            seekCallback.seekToBeginning(assignedPartitions);
-            pendingReplay = false;
-            // Throw exception or return to force re-poll from the beginning
-            throw new RuntimeException("Forcing offset reset for replay");
-        }
-
-        // Validate tenant_id header matches event tenantId
-        String headerTenantId = new String(tenantIdBytes, StandardCharsets.UTF_8);
-        if (!event.tenantId().toString().equals(headerTenantId)) {
-            throw new IllegalArgumentException("Tenant ID mismatch: header=" + headerTenantId + ", event=" + event.tenantId());
-        }
-
-        if (idempotentConsumerService.checkAndRecord(event.eventId())) {
-            log.info("Duplicate event ignored: eventId={}", event.eventId());
-            return;
-        }
-
-        UUID previousTenant = TenantContext.getCurrentTenant();
-        TenantContext.setCurrentTenant(event.tenantId());
+    public void consume(ImageResultEvent event,
+                        @Header("tenant_id") byte[] tenantIdBytes,
+                        @Header(value = "correlation_id", required = false) byte[] correlationIdBytes) {
+        String correlationId = correlationIdBytes != null ? new String(correlationIdBytes, StandardCharsets.UTF_8) : UUID.randomUUID().toString();
+        org.slf4j.MDC.put("correlation_id", correlationId);
         try {
-            ProductImage productImage = new ProductImage(event.tenantId(), event.productId(), event.imageUrl());
-            productImageRepository.save(productImage);
-            log.info("Successfully attached generated image reference to product: productId={}", event.productId());
-        } catch (Exception e) {
-            log.error("Failed to attach image reference to product: productId={}", event.productId(), e);
-            throw new RuntimeException("Error attaching generated image to product: " + event.productId(), e);
-        } finally {
-            if (previousTenant != null) {
-                TenantContext.setCurrentTenant(previousTenant);
-            } else {
-                TenantContext.clear();
+            log.info("Received image result event: eventId={}, productId={}, tenantId={}, imageUrl='{}'",
+                    event.eventId(), event.productId(), event.tenantId(), event.imageUrl());
+
+            if (pendingReplay && seekCallback != null && !assignedPartitions.isEmpty()) {
+                log.info("Executing deferred replay seek on consumer thread during consume processing");
+                seekCallback.seekToBeginning(assignedPartitions);
+                pendingReplay = false;
+                // Throw exception or return to force re-poll from the beginning
+                throw new RuntimeException("Forcing offset reset for replay");
             }
+
+            // Validate tenant_id header matches event tenantId
+            String headerTenantId = new String(tenantIdBytes, StandardCharsets.UTF_8);
+            if (!event.tenantId().toString().equals(headerTenantId)) {
+                throw new IllegalArgumentException("Tenant ID mismatch: header=" + headerTenantId + ", event=" + event.tenantId());
+            }
+
+            if (idempotentConsumerService.checkAndRecord(event.eventId())) {
+                log.info("Duplicate event ignored: eventId={}", event.eventId());
+                return;
+            }
+
+            UUID previousTenant = TenantContext.getCurrentTenant();
+            TenantContext.setCurrentTenant(event.tenantId());
+            try {
+                ProductImage productImage = new ProductImage(event.tenantId(), event.productId(), event.imageUrl());
+                productImageRepository.save(productImage);
+                log.info("Successfully attached generated image reference to product: productId={}", event.productId());
+            } catch (Exception e) {
+                log.error("Failed to attach image reference to product: productId={}", event.productId(), e);
+                throw new RuntimeException("Error attaching generated image to product: " + event.productId(), e);
+            } finally {
+                if (previousTenant != null) {
+                    TenantContext.setCurrentTenant(previousTenant);
+                } else {
+                    TenantContext.clear();
+                }
+            }
+        } finally {
+            org.slf4j.MDC.remove("correlation_id");
         }
     }
 }

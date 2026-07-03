@@ -54,6 +54,7 @@ public class OutboxEventService {
             throw new IllegalArgumentException("Cannot serialise outbox payload", e);
         }
 
+        String correlationId = org.slf4j.MDC.get("correlation_id");
         OutboxEvent event = new OutboxEvent(
                 UUID.randomUUID(),
                 aggregateType,
@@ -62,7 +63,8 @@ public class OutboxEventService {
                 eventType,
                 topic,
                 json,
-                Instant.now()
+                Instant.now(),
+                correlationId
         );
 
         outboxEventRepository.save(event);

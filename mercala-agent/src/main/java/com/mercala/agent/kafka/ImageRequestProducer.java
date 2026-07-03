@@ -45,6 +45,10 @@ public class ImageRequestProducer {
                             event
                     );
             record.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String correlationId = org.slf4j.MDC.get("correlation_id");
+            if (correlationId != null) {
+                record.headers().add("correlation_id", correlationId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
             kafkaTemplate.send(record);
             log.info("Successfully published image request event to Kafka topic {}", imageRequestsTopic);
         } catch (Exception e) {

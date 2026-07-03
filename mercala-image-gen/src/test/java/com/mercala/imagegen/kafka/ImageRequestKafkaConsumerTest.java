@@ -78,8 +78,13 @@ class ImageRequestKafkaConsumerTest {
         byte[] mockBytes = new byte[]{10, 20, 30};
         String mockUrl = "http://localhost:9000/mercala-images/" + tenantId + "/" + productId + ".png";
 
+        String testCorrelationId = "correlation-id-test-image-gen";
+
         // Configure Mocks
-        when(imageProvider.generateImage(eq(prompt))).thenReturn(mockBytes);
+        when(imageProvider.generateImage(eq(prompt))).thenAnswer(invocation -> {
+            assertEquals(testCorrelationId, org.slf4j.MDC.get("correlation_id"));
+            return mockBytes;
+        });
         when(storageService.uploadImage(eq(tenantId), eq(productId), eq(mockBytes))).thenReturn(mockUrl);
 
         // Send request event
@@ -91,6 +96,7 @@ class ImageRequestKafkaConsumerTest {
                         requestEvent
                 );
         record1.headers().add("tenant_id", tenantId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        record1.headers().add("correlation_id", testCorrelationId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         kafkaTemplate.send(record1);
 
         // 1. Verify consumer received the event

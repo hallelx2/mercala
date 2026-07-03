@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+
+    <!-- Console appender for human-readable text logs (local/test development) -->
+    <appender name="CONSOLE_TEXT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %clr(%m){faint} %clr([correlation_id=%X{correlation_id:-none}]){magenta}%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Structured JSON logging console appender -->
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdc>true</includeMdc>
+            <includeContext>false</includeContext>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <level>level</level>
+                <thread>thread</thread>
+                <logger>logger</logger>
+                <message>message</message>
+                <stackTrace>stack_trace</stackTrace>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <!-- Configure log output format based on active profiles -->
+    <root level="INFO">
+        <springProfile name="local | test">
+            <appender-ref ref="CONSOLE_TEXT" />
+        </springProfile>
+        <springProfile name="!local &amp; !test">
+            <appender-ref ref="CONSOLE_JSON" />
+        </springProfile>
+    </root>
+
+    <logger name="org.apache.kafka" level="WARN" />
+    <logger name="org.apache.zookeeper" level="WARN" />
+</configuration>

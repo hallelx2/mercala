@@ -40,6 +40,10 @@ public class MercalaCoreClient {
         } catch (IllegalStateException e) {
             log.warn("AgentContext not available — call will proceed without tenant header");
         }
+        String correlationId = org.slf4j.MDC.get("correlation_id");
+        if (correlationId != null) {
+            headers.set("X-Correlation-Id", correlationId);
+        }
         return headers;
     }
 
