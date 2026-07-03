@@ -10,6 +10,11 @@ import org.springframework.web.client.RestClient;
 
 import com.mercala.catalog.ports.EmbeddingPort;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Adapter calling OpenAI-compatible embedding endpoints (e.g. text-embedding-3-small).
  * Integrates a deterministic hash-based mock fallback if no API key is provided,
@@ -17,6 +22,8 @@ import com.mercala.catalog.ports.EmbeddingPort;
  */
 @Component
 public class OpenAiEmbeddingClient implements EmbeddingPort {
+
+    private static final Logger log = LoggerFactory.getLogger(OpenAiEmbeddingClient.class);
 
     private final RestClient restClient;
     private final String apiKey;
@@ -35,6 +42,8 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
     }
 
     @Override
+    @CircuitBreaker(name = "openai-embedding", fallbackMethod = "fallbackGetEmbedding")
+    @Retry(name = "openai-embedding")
     @SuppressWarnings("unchecked")
     public float[] getEmbedding(String text) {
         // Fallback to deterministic mock vectors for tests or setups without keys
@@ -119,5 +128,13 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
         }
 
         return mockVector;
+    }
+
+    /**
+     * Fallback method executed when OpenAI embedding API fails or circuit is open.
+     */
+    public float[] fallbackGetEmbedding(String text, Throwable t) {
+        log.warn("OpenAI embedding API failed or circuit is open. Falling back to deterministic mock embedding. Error: {}", t.getMessage());
+        return generateMockEmbedding(text);
     }
 }
