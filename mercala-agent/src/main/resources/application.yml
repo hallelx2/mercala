@@ -38,3 +38,7 @@ management:
   endpoint:
     health:
       show-details: always
+
+springdoc:
+  api-docs:
+    path: /api/agent/v3/api-docs
