@@ -53,6 +53,11 @@ public class MerchantAgentService {
             4. After a successful action, summarize what was done (product name, ID, variant count, etc.).
             5. If you're unsure about a field, ask — don't guess.
             6. You are tenant-scoped. You can only act on the current merchant's store.
+
+            ## CRITICAL: Function Calling Format
+            If you decide to invoke a function, format it exactly as:
+            <function=toolName>{"arg1": "val1"}</function>
+            Never include parentheses around the JSON arguments (e.g., never output <function=toolName(...)>).
             """;
 
     private static final Set<String> MERCHANT_TOOLS = Set.of(
