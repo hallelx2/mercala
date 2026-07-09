@@ -88,4 +88,14 @@ public class MercalaCoreClient {
         HttpEntity<float[]> entity = new HttpEntity<>(embedding, buildHeaders());
         restTemplate.exchange(url, HttpMethod.PUT, entity, Void.class);
     }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getAuthMe(String authHeader) {
+        String url = coreBaseUrl + "/api/auth/me";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", authHeader);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        return restTemplate.exchange(url, HttpMethod.GET, entity, Map.class).getBody();
+    }
 }

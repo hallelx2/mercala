@@ -77,6 +77,21 @@ public class MerchantAgentService {
         UUID tenantId = request.tenantId();
         UUID userId = request.userId();
 
+        try {
+            AgentContext ctx = AgentContext.current();
+            if (tenantId != null && !tenantId.equals(ctx.tenantId())) {
+                throw new IllegalArgumentException("Tenant ID mismatch with authenticated session");
+            }
+            if (userId != null && !userId.equals(ctx.userId())) {
+                throw new IllegalArgumentException("User ID mismatch with authenticated session");
+            }
+            // Use context values if request fields were omitted
+            if (tenantId == null) tenantId = ctx.tenantId();
+            if (userId == null) userId = ctx.userId();
+        } catch (IllegalStateException ignored) {
+            // No pre-existing context (e.g. from unit tests), proceed with request parameters
+        }
+
         log.info("Merchant agent chat — tenant={}, user={}, message='{}'",
                 tenantId, userId, truncate(request.message(), 80));
 
