@@ -73,4 +73,16 @@ http {
             limit_req zone=api_limit burst=10 nodelay;
         }
     }
+
+    # Internal proxy for GLM OpenAI compatibility
+    server {
+        listen 8085;
+
+        location /v1/chat/completions {
+            proxy_pass https://open.bigmodel.cn/api/paas/v4/chat/completions;
+            proxy_ssl_server_name on;
+            proxy_set_header Host open.bigmodel.cn;
+            proxy_set_header Authorization $http_authorization;
+        }
+    }
 }
