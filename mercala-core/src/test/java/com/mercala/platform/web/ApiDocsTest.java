@@ -33,7 +33,7 @@ class ApiDocsTest extends AbstractIntegrationTest {
 
     @Test
     void scalarReferencePageIsServed() throws Exception {
-        mockMvc.perform(get("/docs"))
+        mockMvc.perform(get("/api/v1/docs"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("@scalar/api-reference")));
     }

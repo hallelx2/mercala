@@ -57,6 +57,11 @@ public class ShopperAgentService {
             5. Be conversational and helpful — you're a personal shopping assistant, not a search engine.
             6. If a product is out of stock or has limited availability, mention it.
             7. You are tenant-scoped — you can only show products from the current store.
+
+            ## CRITICAL: Function Calling Format
+            If you decide to invoke a function, format it exactly as:
+            <function=toolName>{"arg1": "val1"}</function>
+            Never include parentheses around the JSON arguments (e.g., never output <function=toolName(...)>).
             """;
 
     /**
