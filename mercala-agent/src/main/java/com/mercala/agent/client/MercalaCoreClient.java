@@ -24,16 +24,20 @@ public class MercalaCoreClient {
 
     private final RestTemplate restTemplate;
     private final String coreBaseUrl;
+    private final String internalServiceKey;
 
     public MercalaCoreClient(
-            @Value("${mercala.core.base-url:http://localhost:8080}") String coreBaseUrl) {
+            @Value("${mercala.core.base-url:http://localhost:8080}") String coreBaseUrl,
+            @Value("${mercala.internal.service-key:mercala-internal-key-secret-2026}") String internalServiceKey) {
         this.restTemplate = new RestTemplate();
         this.coreBaseUrl = coreBaseUrl;
+        this.internalServiceKey = internalServiceKey;
     }
 
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Internal-Service-Key", internalServiceKey);
         try {
             AgentContext ctx = AgentContext.current();
             headers.set(TENANT_HEADER, ctx.tenantId().toString());

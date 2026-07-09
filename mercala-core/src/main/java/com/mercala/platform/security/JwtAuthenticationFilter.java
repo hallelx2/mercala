@@ -34,30 +34,56 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final String internalServiceKey;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(
+            JwtService jwtService,
+            @org.springframework.beans.factory.annotation.Value("${mercala.internal.service-key:mercala-internal-key-secret-2026}") String internalServiceKey) {
         this.jwtService = jwtService;
+        this.internalServiceKey = internalServiceKey;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String token = extractBearerToken(request.getHeader("Authorization"));
-        if (token != null) {
-            try {
-                Claims claims = jwtService.parse(token).getPayload();
-                AuthenticatedUser principal = new AuthenticatedUser(
-                        UUID.fromString(claims.getSubject()),
-                        UUID.fromString(claims.get("tenant_id", String.class)),
-                        claims.get("email", String.class),
-                        Role.valueOf(claims.get("role", String.class)));
-                var authentication = new UsernamePasswordAuthenticationToken(
-                        principal, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + principal.role().name())));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (JwtException | IllegalArgumentException ex) {
-                log.debug("Rejected JWT: {}", ex.getMessage());
-                SecurityContextHolder.clearContext();
+        String internalKey = request.getHeader("X-Internal-Service-Key");
+        if (internalKey != null && internalKey.equals(internalServiceKey)) {
+            String tenantIdStr = request.getHeader("X-Tenant-ID");
+            if (tenantIdStr != null) {
+                try {
+                    UUID tenantId = UUID.fromString(tenantIdStr);
+                    AuthenticatedUser principal = new AuthenticatedUser(
+                            UUID.fromString("00000000-0000-0000-0000-000000000000"),
+                            tenantId,
+                            "system-agent@mercala.com",
+                            Role.MERCHANT_OWNER
+                    );
+                    var authentication = new UsernamePasswordAuthenticationToken(
+                            principal, null,
+                            List.of(new SimpleGrantedAuthority("ROLE_" + principal.role().name())));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                } catch (IllegalArgumentException ex) {
+                    log.warn("Invalid tenant ID format in X-Tenant-ID header: {}", tenantIdStr);
+                }
+            }
+        } else {
+            String token = extractBearerToken(request.getHeader("Authorization"));
+            if (token != null) {
+                try {
+                    Claims claims = jwtService.parse(token).getPayload();
+                    AuthenticatedUser principal = new AuthenticatedUser(
+                            UUID.fromString(claims.getSubject()),
+                            UUID.fromString(claims.get("tenant_id", String.class)),
+                            claims.get("email", String.class),
+                            Role.valueOf(claims.get("role", String.class)));
+                    var authentication = new UsernamePasswordAuthenticationToken(
+                            principal, null,
+                            List.of(new SimpleGrantedAuthority("ROLE_" + principal.role().name())));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                } catch (JwtException | IllegalArgumentException ex) {
+                    log.debug("Rejected JWT: {}", ex.getMessage());
+                    SecurityContextHolder.clearContext();
+                }
             }
         }
         chain.doFilter(request, response);
