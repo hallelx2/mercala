@@ -11,9 +11,30 @@ http {
     # Rate limiting zone for simple security
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 
+    # Redirect HTTP to HTTPS
     server {
         listen 80;
-        server_name localhost;
+        server_name {{ server_domain | default('mercalaapi.hallelx2.com') }};
+
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # HTTPS server
+    server {
+        listen 443 ssl;
+        server_name {{ server_domain | default('mercalaapi.hallelx2.com') }};
+
+        ssl_certificate     /etc/letsencrypt/live/{{ server_domain | default('mercalaapi.hallelx2.com') }}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/{{ server_domain | default('mercalaapi.hallelx2.com') }}/privkey.pem;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+        ssl_ciphers         HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
 
         # Health check endpoint for AWS or monitoring
         location /health {
