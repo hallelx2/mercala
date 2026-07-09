@@ -2,17 +2,16 @@ package com.mercala.platform.web;
 
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Serves the unified Scalar API documentation portal at {@code /api/v1/docs}.
- * Allows the user to toggle between Core Platform APIs and AI Agent APIs.
+ * Serves the unified, zero-reload Scalar API documentation portal at {@code /api/v1/docs}.
+ * Allows the user to toggle instantly between Core Platform and AI Agent spec sheets.
  */
 @RestController
 public class ScalarDocsController {
 
-    private static final String PORTAL_TEMPLATE = """
+    private static final String PORTAL_HTML = """
             <!doctype html>
             <html lang="en">
               <head>
@@ -86,7 +85,6 @@ public class ScalarDocsController {
                     border-radius: 6px;
                     border: none;
                     cursor: pointer;
-                    text-decoration: none;
                     transition: all 0.2s ease;
                     color: #615f5a;
                     background: transparent;
@@ -116,10 +114,18 @@ public class ScalarDocsController {
                   .info-card {
                     background: #ffffff;
                     border: 1px solid var(--border-neutral);
-                    border-left: 5px solid %s;
                     border-radius: 8px;
                     padding: 1.5rem;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+                    transition: border-color 0.3s ease;
+                  }
+
+                  .info-card.info-core {
+                    border-left: 5px solid var(--accent-green);
+                  }
+
+                  .info-card.info-agent {
+                    border-left: 5px solid var(--accent-amber);
                   }
 
                   .info-card h1 {
@@ -167,8 +173,12 @@ public class ScalarDocsController {
                   .api-container {
                     border-top: 1px solid var(--border-neutral);
                   }
+
+                  .docs-wrapper {
+                    width: 100%;
+                  }
                   
-                  /* Override default Scalar font family and some styles dynamically */
+                  /* Custom overrides to match Scalar UI elements font */
                   .scalar-app {
                     --scalar-font: 'Geist Sans', sans-serif !important;
                     --scalar-font-code: 'Geist Mono', monospace !important;
@@ -183,73 +193,105 @@ public class ScalarDocsController {
                       <span style="font-weight: 500; font-size: 1.1rem; color: #615f5a; border-left: 1px solid #dcdad5; padding-left: 0.5rem;">API GATEWAY</span>
                     </div>
                     <div class="service-tabs">
-                      <a href="/api/v1/docs?service=core" class="tab-btn %s">Core Platform API</a>
-                      <a href="/api/v1/docs?service=agent" class="tab-btn %s">AI Agent API</a>
+                      <button id="btn-core" class="tab-btn active-core" onclick="showService('core')">Core Platform API</button>
+                      <button id="btn-agent" class="tab-btn" onclick="showService('agent')">AI Agent API</button>
                     </div>
                   </div>
                 </header>
 
                 <div class="info-bar">
-                  <div class="info-card">
-                    <h1>%s</h1>
-                    <p>%s</p>
+                  <div id="info-card" class="info-card info-core">
+                    <h1 id="info-title">Mercala Core Platform API</h1>
+                    <p id="info-desc">The primary backend of the Mercala platform. Handles catalog management, multitenancy, merchant registration, checkout processes, shopping carts, order pipelines, file uploads, authentication, and secure webhook integrations.</p>
                     <div class="info-meta">
                       <div class="info-meta-item">
                         <span>Scope:</span>
-                        <span class="badge %s">%s</span>
+                        <span id="info-scope" class="badge badge-green">Platform/Core</span>
                       </div>
                       <div class="info-meta-item">
                         <span>Endpoint Base:</span>
-                        <code>%s</code>
+                        <code id="info-base">https://mercalaapi.hallelx2.com/api/v1</code>
                       </div>
                       <div class="info-meta-item">
                         <span>Spec Path:</span>
-                        <code>%s</code>
+                        <code id="info-spec">/v3/api-docs</code>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div class="api-container">
-                  <script id="api-reference" data-url="%s"></script>
-                  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+                  <!-- Core Docs Reference View -->
+                  <div id="docs-core" class="docs-wrapper"></div>
+                  
+                  <!-- Agent Docs Reference View -->
+                  <div id="docs-agent" class="docs-wrapper" style="display: none;"></div>
                 </div>
+
+                <!-- Load Scalar reference library -->
+                <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+                
+                <script>
+                  // Programmatically initialize both Scalar specs on page load
+                  Scalar.createApiReference('#docs-core', {
+                    url: '/v3/api-docs'
+                  });
+
+                  Scalar.createApiReference('#docs-agent', {
+                    url: '/api/v1/agent/v3/api-docs'
+                  });
+
+                  // Client-side instant tab toggle (zero-reload)
+                  function showService(service) {
+                    const btnCore = document.getElementById('btn-core');
+                    const btnAgent = document.getElementById('btn-agent');
+                    const docsCore = document.getElementById('docs-core');
+                    const docsAgent = document.getElementById('docs-agent');
+                    
+                    const infoCard = document.getElementById('info-card');
+                    const infoTitle = document.getElementById('info-title');
+                    const infoDesc = document.getElementById('info-desc');
+                    const infoScope = document.getElementById('info-scope');
+                    const infoBase = document.getElementById('info-base');
+                    const infoSpec = document.getElementById('info-spec');
+
+                    if (service === 'core') {
+                      docsCore.style.display = 'block';
+                      docsAgent.style.display = 'none';
+                      
+                      btnCore.className = 'tab-btn active-core';
+                      btnAgent.className = 'tab-btn';
+                      
+                      infoCard.className = 'info-card info-core';
+                      infoTitle.innerText = 'Mercala Core Platform API';
+                      infoDesc.innerText = 'The primary backend of the Mercala platform. Handles catalog management, multitenancy, merchant registration, checkout processes, shopping carts, order pipelines, file uploads, authentication, and secure webhook integrations.';
+                      infoScope.innerText = 'Platform/Core';
+                      infoScope.className = 'badge badge-green';
+                      infoBase.innerText = 'https://mercalaapi.hallelx2.com/api/v1';
+                      infoSpec.innerText = '/v3/api-docs';
+                    } else {
+                      docsCore.style.display = 'none';
+                      docsAgent.style.display = 'block';
+                      
+                      btnCore.className = 'tab-btn';
+                      btnAgent.className = 'tab-btn active-agent';
+                      
+                      infoCard.className = 'info-card info-agent';
+                      infoTitle.innerText = 'Mercala AI Agent Service API';
+                      infoDesc.innerText = 'Powered by Spring AI, this microservice handles all natural language conversational flows. It enables merchant agents to dynamically query/create products and variants, and shopper agents to search, ground, and recommend catalog items contextually.';
+                      infoScope.innerText = 'Agent/AI';
+                      infoScope.className = 'badge badge-amber';
+                      infoBase.innerText = 'https://mercalaapi.hallelx2.com/api/v1/agent';
+                      infoSpec.innerText = '/api/v1/agent/v3/api-docs';
+                    }
+                  }
+                </script>
               </body>
             </html>
             """;
 
     @GetMapping(value = "/api/v1/docs", produces = MediaType.TEXT_HTML_VALUE)
-    public String scalar(@RequestParam(value = "service", defaultValue = "core") String service) {
-        if ("agent".equalsIgnoreCase(service)) {
-            return String.format(PORTAL_TEMPLATE,
-                    "var(--accent-amber)",                     // Left border color
-                    "",                                        // Core tab active class
-                    "active-agent",                            // Agent tab active class
-                    "Mercala AI Agent Service API",            // Card title
-                    "Powered by Spring AI, this microservice handles all natural language conversational flows. " +
-                    "It enables merchant agents to dynamically query/create products and variants, and shopper agents to search, " +
-                    "ground, and recommend catalog items contextually.",
-                    "badge-amber",                             // Badge color class
-                    "Agent/AI",                                // Scope text
-                    "https://mercalaapi.hallelx2.com/api/v1/agent", // Base URL
-                    "/api/v1/agent/v3/api-docs",               // Spec Path text
-                    "/api/v1/agent/v3/api-docs"                // Scalar actual load path
-            );
-        } else {
-            return String.format(PORTAL_TEMPLATE,
-                    "var(--accent-green)",                     // Left border color
-                    "active-core",                             // Core tab active class
-                    "",                                        // Agent tab active class
-                    "Mercala Core Platform API",               // Card title
-                    "The primary backend of the Mercala platform. Handles catalog management, multitenancy, " +
-                    "merchant registration, checkout processes, shopping carts, order pipelines, file uploads, " +
-                    "authentication, and secure webhook integrations.",
-                    "badge-green",                             // Badge color class
-                    "Platform/Core",                           // Scope text
-                    "https://mercalaapi.hallelx2.com/api/v1",  // Base URL
-                    "/v3/api-docs",                            // Spec Path text
-                    "/v3/api-docs"                             // Scalar actual load path
-            );
-        }
+    public String scalar() {
+        return PORTAL_HTML;
     }
 }
