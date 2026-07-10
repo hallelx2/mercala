@@ -29,6 +29,7 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
     private final RestClient restClient;
     private final String apiKey;
     private final String model;
+    private final boolean isTestProfile;
     private AllMiniLmL6V2EmbeddingModel localModel;
 
     private synchronized AllMiniLmL6V2EmbeddingModel getLocalModel() {
@@ -42,9 +43,11 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
     public OpenAiEmbeddingClient(
             @Value("${app.openai.api-url:https://api.openai.com/v1}") String apiUrl,
             @Value("${app.openai.api-key:}") String apiKey,
-            @Value("${app.openai.embedding-model:text-embedding-3-small}") String model) {
+            @Value("${app.openai.embedding-model:text-embedding-3-small}") String model,
+            org.springframework.core.env.Environment env) {
         this.apiKey = apiKey;
         this.model = model;
+        this.isTestProfile = java.util.Arrays.asList(env.getActiveProfiles()).contains("test");
         this.restClient = RestClient.builder()
                 .baseUrl(apiUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
@@ -107,6 +110,10 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
      * but predictable patterns, allowing integration tests to assert query correctness.
      */
     private float[] generateMockEmbedding(String text) {
+        if (isTestProfile) {
+            log.debug("Test profile active: Using deterministic fake vector for hermetic test.");
+            return generateFakeVector(text);
+        }
         try {
             float[] vector384 = getLocalModel().embed(text).content().vector();
             float[] paddedVector = new float[1536];
