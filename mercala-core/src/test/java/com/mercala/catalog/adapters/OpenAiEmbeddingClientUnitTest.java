@@ -3,14 +3,21 @@ package com.mercala.catalog.adapters;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.mockito.Mockito;
+import org.springframework.core.env.Environment;
+
 public class OpenAiEmbeddingClientUnitTest {
 
     @Test
     void testLocalOnnxEmbedding() {
+        Environment env = Mockito.mock(Environment.class);
+        Mockito.when(env.getActiveProfiles()).thenReturn(new String[]{}); // Trigger local ONNX path by keeping test profile inactive in this unit test
+        
         OpenAiEmbeddingClient client = new OpenAiEmbeddingClient(
                 "https://api.openai.com/v1",
                 "",  // Empty api key to trigger mock/local mode
-                "text-embedding-3-small"
+                "text-embedding-3-small",
+                env
         );
 
         float[] embedding = client.getEmbedding("comfortable footwear");
