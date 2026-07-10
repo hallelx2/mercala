@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(properties = {
         "spring.ai.openai.image.enabled=true",
         "spring.ai.openai.api-key=dummy",
+        "mercala.image-gen.provider=openai",
         "mercala.storage.endpoint=http://localhost:9000",
         "mercala.storage.access-key=dummy",
         "mercala.storage.secret-key=dummy",
