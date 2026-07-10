@@ -15,6 +15,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
+import java.net.HttpURLConnection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -44,8 +47,8 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
     @Override
     public byte[] generateImage(String prompt) {
         if (imageModel == null) {
-            log.warn("ImageModel is not available. Falling back to generating a mock PNG image.");
-            return generateMockImage();
+            log.warn("ImageModel is not available. Falling back to keyless AI image generator.");
+            return generateMockImage(prompt);
         }
 
         CircuitBreaker cb = circuitBreakerRegistry != null ? 
@@ -55,7 +58,7 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
 
         if (cb != null && !cb.tryAcquirePermission()) {
             log.warn("Circuit breaker is OPEN. Falling back to mock image.");
-            return generateMockImage();
+            return generateMockImage(prompt);
         }
 
         long start = System.nanoTime();
@@ -75,7 +78,7 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
                 cb.onError(System.nanoTime() - start, java.util.concurrent.TimeUnit.NANOSECONDS, e);
             }
             log.error("Failed to generate image via OpenAI ImageModel. Falling back to mock PNG. Error: {}", e.getMessage());
-            return generateMockImage();
+            return generateMockImage(prompt);
         }
     }
 
@@ -114,16 +117,51 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
         throw new RuntimeException("Neither b64_json nor url was returned by ImageModel");
     }
 
-    private byte[] generateMockImage() {
+    private byte[] generateMockImage(String prompt) {
+        log.info("Attempting to fetch a free AI image from Pollinations.ai for prompt: '{}'", prompt);
+        try {
+            String encodedPrompt = URLEncoder.encode(prompt, StandardCharsets.UTF_8);
+            String urlStr = "https://image.pollinations.ai/prompt/" + encodedPrompt + "?width=1024&height=1024&nologo=true&private=true";
+
+            URL url = URI.create(urlStr).toURL();
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(12000);
+
+            int status = conn.getResponseCode();
+            if (status == 200) {
+                try (var is = conn.getInputStream()) {
+                    byte[] bytes = is.readAllBytes();
+                    log.info("Successfully fetched AI image from Pollinations.ai (size: {} bytes)", bytes.length);
+                    return bytes;
+                }
+            } else {
+                log.warn("Pollinations.ai returned status {}. Falling back to canvas drawing.", status);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch image from Pollinations.ai. Error: {}. Falling back to canvas drawing.", e.getMessage());
+        }
+
+        return drawPlaceholderImage(prompt);
+    }
+
+    private byte[] drawPlaceholderImage(String prompt) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            BufferedImage img = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
-            
+            BufferedImage img = new BufferedImage(512, 512, BufferedImage.TYPE_INT_RGB);
+
             var g = img.createGraphics();
-            g.setColor(new java.awt.Color(34, 139, 34)); // Forest green
-            g.fillRect(0, 0, 128, 128);
+            int hashCode = prompt != null ? prompt.hashCode() : 0;
+            java.util.Random r = new java.util.Random(hashCode);
+            g.setColor(new java.awt.Color(r.nextInt(150) + 30, r.nextInt(150) + 30, r.nextInt(150) + 30));
+            g.fillRect(0, 0, 512, 512);
+
             g.setColor(java.awt.Color.WHITE);
-            g.drawString("MOCK IMAGE", 10, 64);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 24));
+
+            String text = prompt != null && prompt.length() > 30 ? prompt.substring(0, 27) + "..." : prompt;
+            g.drawString(text != null ? text : "MOCK IMAGE", 40, 256);
             g.dispose();
 
             ImageIO.write(img, "png", baos);
