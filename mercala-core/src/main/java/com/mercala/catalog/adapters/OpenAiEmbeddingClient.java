@@ -14,6 +14,7 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
 
 /**
  * Adapter calling OpenAI-compatible embedding endpoints (e.g. text-embedding-3-small).
@@ -28,6 +29,15 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
     private final RestClient restClient;
     private final String apiKey;
     private final String model;
+    private AllMiniLmL6V2EmbeddingModel localModel;
+
+    private synchronized AllMiniLmL6V2EmbeddingModel getLocalModel() {
+        if (localModel == null) {
+            log.info("Initializing local in-process ONNX embedding model (all-MiniLM-L6-v2, 22MB)...");
+            localModel = new AllMiniLmL6V2EmbeddingModel();
+        }
+        return localModel;
+    }
 
     public OpenAiEmbeddingClient(
             @Value("${app.openai.api-url:https://api.openai.com/v1}") String apiUrl,
@@ -97,6 +107,30 @@ public class OpenAiEmbeddingClient implements EmbeddingPort {
      * but predictable patterns, allowing integration tests to assert query correctness.
      */
     private float[] generateMockEmbedding(String text) {
+        try {
+            float[] vector384 = getLocalModel().embed(text).content().vector();
+            float[] paddedVector = new float[1536];
+            System.arraycopy(vector384, 0, paddedVector, 0, vector384.length);
+
+            // L2 Normalize the vector so cosine similarity calculations are mathematically standard (magnitude = 1)
+            double normSum = 0;
+            for (float val : paddedVector) {
+                normSum += val * val;
+            }
+            float norm = (float) Math.sqrt(normSum);
+            if (norm > 0) {
+                for (int i = 0; i < 1536; i++) {
+                    paddedVector[i] /= norm;
+                }
+            }
+            return paddedVector;
+        } catch (Exception e) {
+            log.warn("Local ONNX embedding model failed or is unsupported on this platform. Falling back to deterministic random vector. Error: {}", e.getMessage());
+            return generateFakeVector(text);
+        }
+    }
+
+    private float[] generateFakeVector(String text) {
         float[] mockVector = new float[1536];
         String normalized = text.toLowerCase().trim();
 
