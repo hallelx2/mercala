@@ -13,6 +13,7 @@
     s3_endpoint: "https://s3.{{ aws_region }}.amazonaws.com"
     aws_access_key_id: "{{ aws_access_key_id_env }}"
     aws_secret_access_key: "{{ aws_secret_access_key_env }}"
+    aws_session_token: "{{ aws_session_token_env | default('') }}"
     ecr_core_url: "{{ ecr_core_url_env }}"
     ecr_agent_url: "{{ ecr_agent_url_env }}"
     ecr_image_gen_url: "{{ ecr_image_gen_url_env }}"
@@ -102,6 +103,7 @@
       environment:
         AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
         AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
+        AWS_SESSION_TOKEN: "{{ aws_session_token }}"
 
     - name: Create application deployment directory
       file:
@@ -149,3 +151,4 @@
       environment:
         AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
         AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
+        AWS_SESSION_TOKEN: "{{ aws_session_token }}"
