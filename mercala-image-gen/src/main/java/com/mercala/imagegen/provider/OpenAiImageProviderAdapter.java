@@ -7,6 +7,7 @@ import org.springframework.ai.image.ImagePrompt;
 import org.springframework.ai.image.ImageResponse;
 import org.springframework.ai.openai.OpenAiImageOptions;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
@@ -19,12 +20,17 @@ import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Optional;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
 
+/**
+ * Switchable adapter implementing the ImageProvider port.
+ * Can be configured via environment variable/property: mercala.image-gen.provider (openai, pollinations, local).
+ */
 @Component
 public class OpenAiImageProviderAdapter implements ImageProvider {
 
@@ -34,11 +40,14 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
     private final CircuitBreakerRegistry circuitBreakerRegistry;
     private final RetryRegistry retryRegistry;
 
+    @Value("${mercala.image-gen.provider:pollinations}")
+    private String providerType;
+
     @Autowired
     public OpenAiImageProviderAdapter(
-            java.util.Optional<ImageModel> imageModel,
-            java.util.Optional<CircuitBreakerRegistry> circuitBreakerRegistry,
-            java.util.Optional<RetryRegistry> retryRegistry) {
+            Optional<ImageModel> imageModel,
+            Optional<CircuitBreakerRegistry> circuitBreakerRegistry,
+            Optional<RetryRegistry> retryRegistry) {
         this.imageModel = imageModel.orElse(null);
         this.circuitBreakerRegistry = circuitBreakerRegistry.orElse(null);
         this.retryRegistry = retryRegistry.orElse(null);
@@ -46,9 +55,34 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
 
     @Override
     public byte[] generateImage(String prompt) {
+        String mode = providerType != null ? providerType.trim().toLowerCase() : (imageModel != null ? "openai" : "pollinations");
+        log.info("Generating image with provider mode: {}", mode);
+
+        switch (mode) {
+            case "openai":
+                return generateWithOpenAiResilient(prompt);
+            case "pollinations":
+                try {
+                    return callPollinationsApi(prompt);
+                } catch (Exception e) {
+                    log.error("Pollinations.ai generation failed. Falling back to local placeholder. Error: {}", e.getMessage());
+                    return drawPlaceholderImage(prompt);
+                }
+            case "local":
+            default:
+                return drawPlaceholderImage(prompt);
+        }
+    }
+
+    private byte[] generateWithOpenAiResilient(String prompt) {
         if (imageModel == null) {
-            log.warn("ImageModel is not available. Falling back to keyless AI image generator.");
-            return generateMockImage(prompt);
+            log.warn("OpenAI ImageModel is not configured. Falling back to Pollinations.ai provider.");
+            try {
+                return callPollinationsApi(prompt);
+            } catch (Exception e) {
+                log.error("Pollinations.ai fallback failed. Drawing placeholder. Error: {}", e.getMessage());
+                return drawPlaceholderImage(prompt);
+            }
         }
 
         CircuitBreaker cb = circuitBreakerRegistry != null ? 
@@ -57,8 +91,12 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
                 retryRegistry.retry("openai-image") : null;
 
         if (cb != null && !cb.tryAcquirePermission()) {
-            log.warn("Circuit breaker is OPEN. Falling back to mock image.");
-            return generateMockImage(prompt);
+            log.warn("OpenAI Circuit breaker is OPEN. Falling back to Pollinations.ai provider.");
+            try {
+                return callPollinationsApi(prompt);
+            } catch (Exception e) {
+                return drawPlaceholderImage(prompt);
+            }
         }
 
         long start = System.nanoTime();
@@ -77,8 +115,12 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
             if (cb != null) {
                 cb.onError(System.nanoTime() - start, java.util.concurrent.TimeUnit.NANOSECONDS, e);
             }
-            log.error("Failed to generate image via OpenAI ImageModel. Falling back to mock PNG. Error: {}", e.getMessage());
-            return generateMockImage(prompt);
+            log.error("Failed to generate image via OpenAI ImageModel. Trying Pollinations.ai fallback. Error: {}", e.getMessage());
+            try {
+                return callPollinationsApi(prompt);
+            } catch (Exception ex) {
+                return drawPlaceholderImage(prompt);
+            }
         }
     }
 
@@ -103,7 +145,6 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
             return Base64.getDecoder().decode(b64.trim());
         }
 
-        // Fallback: try reading from URL
         String url = response.getResult().getOutput().getUrl();
         if (url != null && !url.isBlank()) {
             log.info("ImageModel returned URL. Downloading image from: {}", url);
@@ -117,36 +158,31 @@ public class OpenAiImageProviderAdapter implements ImageProvider {
         throw new RuntimeException("Neither b64_json nor url was returned by ImageModel");
     }
 
-    private byte[] generateMockImage(String prompt) {
+    private byte[] callPollinationsApi(String prompt) throws Exception {
         log.info("Attempting to fetch a free AI image from Pollinations.ai for prompt: '{}'", prompt);
-        try {
-            String encodedPrompt = URLEncoder.encode(prompt, StandardCharsets.UTF_8);
-            String urlStr = "https://image.pollinations.ai/prompt/" + encodedPrompt + "?width=1024&height=1024&nologo=true&private=true";
+        String encodedPrompt = URLEncoder.encode(prompt, StandardCharsets.UTF_8);
+        String urlStr = "https://image.pollinations.ai/prompt/" + encodedPrompt + "?width=1024&height=1024&nologo=true&private=true";
 
-            URL url = URI.create(urlStr).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(12000);
+        URL url = URI.create(urlStr).toURL();
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(12000);
 
-            int status = conn.getResponseCode();
-            if (status == 200) {
-                try (var is = conn.getInputStream()) {
-                    byte[] bytes = is.readAllBytes();
-                    log.info("Successfully fetched AI image from Pollinations.ai (size: {} bytes)", bytes.length);
-                    return bytes;
-                }
-            } else {
-                log.warn("Pollinations.ai returned status {}. Falling back to canvas drawing.", status);
+        int status = conn.getResponseCode();
+        if (status == 200) {
+            try (var is = conn.getInputStream()) {
+                byte[] bytes = is.readAllBytes();
+                log.info("Successfully fetched AI image from Pollinations.ai (size: {} bytes)", bytes.length);
+                return bytes;
             }
-        } catch (Exception e) {
-            log.warn("Failed to fetch image from Pollinations.ai. Error: {}. Falling back to canvas drawing.", e.getMessage());
+        } else {
+            throw new RuntimeException("Pollinations.ai returned status code " + status);
         }
-
-        return drawPlaceholderImage(prompt);
     }
 
     private byte[] drawPlaceholderImage(String prompt) {
+        log.info("Drawing local canvas placeholder image for prompt: '{}'", prompt);
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             BufferedImage img = new BufferedImage(512, 512, BufferedImage.TYPE_INT_RGB);
