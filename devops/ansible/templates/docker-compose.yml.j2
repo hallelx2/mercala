@@ -64,14 +64,14 @@ services:
       SPRING_FLYWAY_PASSWORD: {{ db_password }}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MERCALA_JWT_SECRET: {{ jwt_secret }}
-      JAVA_OPTS: "-Xmx256m -Xms128m"
+      JAVA_OPTS: "-Xmx512m -Xms256m"
     depends_on:
       - db
       - kafka
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 640M
     restart: always
 
   agent:
