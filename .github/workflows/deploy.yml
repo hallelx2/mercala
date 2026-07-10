@@ -142,6 +142,7 @@ jobs:
       - name: Run Ansible Playbook
         run: |
           ansible-playbook -i "${{ steps.tf-outputs.outputs.public_ip }}," devops/ansible/playbook.yml \
+            -u ubuntu \
             --private-key=~/.ssh/mercala-deploy-key.pem \
             --ssh-common-args="-o StrictHostKeyChecking=no" \
             --extra-vars "db_password_env='${{ secrets.DB_PASSWORD }}' \
