@@ -82,9 +82,9 @@ class KafkaPartitioningAndOrderingTest extends AbstractIntegrationTest {
     @Test
     void verifiesDifferentKeysAreDistributedAcrossPartitions() throws Exception {
         UUID tenantId = UUID.randomUUID();
-        int[] partitions = new int[5];
+        int[] partitions = new int[15];
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 15; i++) {
             UUID productId = UUID.randomUUID();
             ImageResultEvent event = new ImageResultEvent(productId, tenantId, "url-" + i);
             SendResult<String, Object> result = kafkaTemplate.send(
