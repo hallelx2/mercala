@@ -151,4 +151,6 @@ jobs:
                           aws_secret_access_key_env='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
                           ecr_core_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-core' \
                           ecr_agent_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-agent' \
+                          openai_image_model_env='${{ secrets.OPENAI_IMAGE_MODEL }}' \
+                          image_gen_provider_env='${{ secrets.IMAGE_GEN_PROVIDER }}' \
                           ecr_image_gen_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-image-gen'"
