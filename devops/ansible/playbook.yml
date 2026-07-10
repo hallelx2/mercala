@@ -16,6 +16,8 @@
     ecr_core_url: "{{ ecr_core_url_env }}"
     ecr_agent_url: "{{ ecr_agent_url_env }}"
     ecr_image_gen_url: "{{ ecr_image_gen_url_env }}"
+    openai_image_model: "{{ openai_image_model_env | default('cogview-3') }}"
+    image_gen_provider: "{{ image_gen_provider_env | default('pollinations') }}"
     aws_region: "us-east-1"
 
   tasks:
