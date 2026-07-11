@@ -22,6 +22,7 @@ public class MinioStorageService implements StorageService {
     private final String endpoint;
     private final String accessKey;
     private final String secretKey;
+    private final String sessionToken;
     private final String bucket;
     
     private MinioClient minioClient;
@@ -30,10 +31,12 @@ public class MinioStorageService implements StorageService {
             @Value("${mercala.storage.endpoint}") String endpoint,
             @Value("${mercala.storage.access-key}") String accessKey,
             @Value("${mercala.storage.secret-key}") String secretKey,
+            @Value("${mercala.storage.session-token:}") String sessionToken,
             @Value("${mercala.storage.bucket}") String bucket) {
         this.endpoint = endpoint;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
+        this.sessionToken = sessionToken;
         this.bucket = bucket;
     }
 
@@ -41,10 +44,13 @@ public class MinioStorageService implements StorageService {
     public void init() {
         try {
             log.info("Initializing MinIO Client for endpoint: {}", endpoint);
-            this.minioClient = MinioClient.builder()
-                    .endpoint(endpoint)
-                    .credentials(accessKey, secretKey)
-                    .build();
+            io.minio.MinioClient.Builder builder = MinioClient.builder().endpoint(endpoint);
+            if (sessionToken != null && !sessionToken.trim().isEmpty()) {
+                builder.credentials(accessKey, secretKey, sessionToken);
+            } else {
+                builder.credentials(accessKey, secretKey);
+            }
+            this.minioClient = builder.build();
 
             // Ensure bucket exists
             boolean exists = minioClient.bucketExists(

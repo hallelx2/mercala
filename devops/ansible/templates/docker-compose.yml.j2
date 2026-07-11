@@ -102,6 +102,7 @@ services:
       MINIO_ENDPOINT: {{ s3_endpoint }}
       MINIO_ACCESS_KEY: {{ aws_access_key_id }}
       MINIO_SECRET_KEY: {{ aws_secret_access_key }}
+      MINIO_SESSION_TOKEN: "{{ aws_session_token }}"
       MINIO_BUCKET: {{ s3_bucket_name }}
       JAVA_OPTS: "-Xmx256m -Xms128m"
     depends_on:

@@ -22,6 +22,7 @@ mercala:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    session-token: ${MINIO_SESSION_TOKEN:}
     bucket: ${MINIO_BUCKET:mercala-images}
   kafka:
     product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
