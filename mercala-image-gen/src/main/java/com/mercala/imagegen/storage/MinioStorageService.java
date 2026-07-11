@@ -65,24 +65,28 @@ public class MinioStorageService implements StorageService {
             }
 
             // Always ensure the public policy is applied
-            String policyJson = """
-                    {
-                      "Version": "2012-10-17",
-                      "Statement": [
+            try {
+                String policyJson = """
                         {
-                          "Effect": "Allow",
-                          "Principal": {"AWS": ["*"]},
-                          "Action": ["s3:GetObject"],
-                          "Resource": ["arn:aws:s3:::%s/*"]
+                          "Version": "2012-10-17",
+                          "Statement": [
+                            {
+                              "Effect": "Allow",
+                              "Principal": {"AWS": ["*"]},
+                              "Action": ["s3:GetObject"],
+                              "Resource": ["arn:aws:s3:::%s/*"]
+                            }
+                          ]
                         }
-                      ]
-                    }
-                    """.formatted(bucket);
-            minioClient.setBucketPolicy(
-                    SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
-            );
+                        """.formatted(bucket);
+                minioClient.setBucketPolicy(
+                        SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
+                );
+            } catch (Exception e) {
+                log.warn("Failed to set bucket policy (it might be blocked by S3 Block Public Access or restricted IAM policy): {}", e.getMessage());
+            }
         } catch (Exception e) {
-            log.error("Failed to initialize MinIO Client / bucket policy", e);
+            log.error("Failed to initialize MinIO Client / bucket", e);
             throw new RuntimeException("MinioStorageService initialization failed", e);
         }
     }
