@@ -5,6 +5,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.SetBucketPolicyArgs;
+import io.minio.credentials.StaticProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,7 +47,7 @@ public class MinioStorageService implements StorageService {
             log.info("Initializing MinIO Client for endpoint: {}", endpoint);
             io.minio.MinioClient.Builder builder = MinioClient.builder().endpoint(endpoint);
             if (sessionToken != null && !sessionToken.trim().isEmpty()) {
-                builder.credentials(accessKey, secretKey, sessionToken);
+                builder.credentialsProvider(new StaticProvider(accessKey, secretKey, sessionToken));
             } else {
                 builder.credentials(accessKey, secretKey);
             }
