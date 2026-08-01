@@ -136,17 +136,21 @@ public class MinioStorageService implements StorageService {
 
     @Override
     public String uploadImage(UUID tenantId, UUID productId, byte[] imageBytes) {
-        String objectName = tenantId + "/" + productId + ".png";
+        // Providers disagree on output format, so derive it from the bytes instead of
+        // assuming PNG. Storing a WebP as .png with an image/png content type produces a
+        // file some browsers refuse to render.
+        ImageFormat format = ImageFormat.detect(imageBytes);
+        String objectName = tenantId + "/" + productId + "." + format.extension();
 
         try {
-            log.info("Uploading image to bucket={} object={}", bucket, objectName);
+            log.info("Uploading {} image to bucket={} object={}", format, bucket, objectName);
             try (ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes)) {
                 minioClient.putObject(
                         PutObjectArgs.builder()
                                 .bucket(bucket)
                                 .object(objectName)
                                 .stream(bais, imageBytes.length, -1)
-                                .contentType("image/png")
+                                .contentType(format.contentType())
                                 .build()
                 );
             }
