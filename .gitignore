@@ -46,10 +46,14 @@ Thumbs.db
 # Build / runtime
 logs/
 
-# Terraform
-devops/terraform/.terraform/
-devops/terraform/.terraform.lock.hcl
-devops/terraform/terraform.tfstate*
+# Terraform (covers the root stack and devops/terraform/bootstrap)
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
 
 # DevOps secrets (never commit)
 devops/*.pem
