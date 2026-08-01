@@ -10,6 +10,22 @@ variable "project_name" {
   description = "Project name prefix for resource naming. Must match the main Terraform stack."
 }
 
+variable "create_oidc_provider" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Whether this stack creates the GitHub OIDC provider, or references an existing one.
+
+    AWS allows exactly one provider per issuer URL per account, shared by every project.
+    Defaults to false because the provider usually already exists — and because owning it
+    here would mean `terraform destroy` deletes it out from under every other project
+    trusting it.
+
+    Set true only when bootstrapping an account that has no GitHub OIDC provider yet.
+    Check with: aws iam list-open-id-connect-providers
+  EOT
+}
+
 variable "github_repository" {
   type        = string
   default     = "hallelx2/mercala"

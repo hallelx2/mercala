@@ -4,8 +4,8 @@ output "deploy_role_arn" {
 }
 
 output "oidc_provider_arn" {
-  value       = aws_iam_openid_connect_provider.github.arn
-  description = "The GitHub OIDC provider ARN registered in this account."
+  value       = local.github_oidc_provider_arn
+  description = "The GitHub OIDC provider ARN this role trusts. Shared account-wide; owned by this stack only when create_oidc_provider is true."
 }
 
 output "next_step" {

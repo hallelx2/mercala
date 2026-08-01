@@ -33,11 +33,22 @@ data "aws_caller_identity" "current" {}
 ##
 # GitHub's OIDC identity provider.
 #
-# AWS stopped validating these thumbprints for GitHub in 2023, but the provider still
-# requires the field. Both currently-published values are listed so a rotation on
-# GitHub's side cannot break deploys.
+# This is an ACCOUNT-WIDE SINGLETON: AWS permits exactly one provider per issuer URL, and
+# every project in the account shares it. So by default this stack only references the
+# existing one rather than managing it.
+#
+# That is deliberate. If Mercala owned the provider, `terraform destroy` here would delete
+# it out from under every other project trusting it — this account already has
+# VoxtarGitHubDeployRole depending on the same provider.
+#
+# Set create_oidc_provider = true only in an account where it does not exist yet. The
+# first project to bootstrap creates it; everyone after references it.
+#
+# AWS stopped validating GitHub's thumbprints in 2023, but the argument is still required.
 ##
 resource "aws_iam_openid_connect_provider" "github" {
+  count = var.create_oidc_provider ? 1 : 0
+
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
   thumbprint_list = [
@@ -49,6 +60,16 @@ resource "aws_iam_openid_connect_provider" "github" {
     Name    = "${var.project_name}-github-oidc"
     Project = var.project_name
   }
+}
+
+data "aws_iam_openid_connect_provider" "github" {
+  count = var.create_oidc_provider ? 0 : 1
+
+  url = "https://token.actions.githubusercontent.com"
+}
+
+locals {
+  github_oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
 }
 
 ##
@@ -65,7 +86,7 @@ data "aws_iam_policy_document" "github_assume_role" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.github_oidc_provider_arn]
     }
 
     condition {
