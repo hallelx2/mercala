@@ -20,9 +20,12 @@ spring:
 mercala:
   storage:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    # Left blank in the deployed stack: the storage client then resolves credentials
+    # from the host's IAM instance profile. Defaults here suit the local MinIO container.
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${MINIO_SECRET_KEY:minioadmin}
     session-token: ${MINIO_SESSION_TOKEN:}
+    region: ${AWS_REGION:}
     bucket: ${MINIO_BUCKET:mercala-images}
   kafka:
     product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}

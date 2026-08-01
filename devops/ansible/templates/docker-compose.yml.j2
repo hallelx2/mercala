@@ -100,12 +100,15 @@ services:
       SPRING_AI_OPENAI_API_KEY: {{ openai_api_key }}
       SPRING_AI_OPENAI_BASE_URL: {{ openai_base_url | default('https://generativelanguage.googleapis.com/v1beta/openai') }}
       SPRING_AI_OPENAI_IMAGE_OPTIONS_MODEL: {{ openai_image_model | default('cogview-3') }}
-      MERCALA_IMAGE_GEN_PROVIDER: {{ image_gen_provider | default('pollinations') }}
+      MERCALA_IMAGE_GEN_PROVIDER: {{ image_gen_provider | default('replicate') }}
+      REPLICATE_API_TOKEN: "{{ replicate_api_token }}"
+      REPLICATE_MODEL: {{ replicate_model | default('black-forest-labs/flux-schnell') }}
       MINIO_ENDPOINT: {{ s3_endpoint }}
-      MINIO_ACCESS_KEY: {{ aws_access_key_id }}
-      MINIO_SECRET_KEY: {{ aws_secret_access_key }}
-      MINIO_SESSION_TOKEN: "{{ aws_session_token }}"
       MINIO_BUCKET: {{ s3_bucket_name }}
+      # No MINIO_ACCESS_KEY / MINIO_SECRET_KEY: leaving them empty makes the storage
+      # client fall back to the AWS default credential chain, which resolves the host's
+      # IAM instance profile from instance metadata.
+      AWS_REGION: {{ aws_region }}
       JAVA_OPTS: "-Xmx256m -Xms128m"
     depends_on:
       - kafka

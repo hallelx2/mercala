@@ -5,6 +5,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.SetBucketPolicyArgs;
+import io.minio.credentials.IamAwsProvider;
 import io.minio.credentials.StaticProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,76 +25,119 @@ public class MinioStorageService implements StorageService {
     private final String accessKey;
     private final String secretKey;
     private final String sessionToken;
+    private final String region;
     private final String bucket;
-    
+
     private MinioClient minioClient;
 
     public MinioStorageService(
             @Value("${mercala.storage.endpoint}") String endpoint,
-            @Value("${mercala.storage.access-key}") String accessKey,
-            @Value("${mercala.storage.secret-key}") String secretKey,
+            @Value("${mercala.storage.access-key:}") String accessKey,
+            @Value("${mercala.storage.secret-key:}") String secretKey,
             @Value("${mercala.storage.session-token:}") String sessionToken,
+            @Value("${mercala.storage.region:}") String region,
             @Value("${mercala.storage.bucket}") String bucket) {
         this.endpoint = endpoint;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
         this.sessionToken = sessionToken;
+        this.region = region;
         this.bucket = bucket;
     }
 
     @PostConstruct
     public void init() {
         try {
-            log.info("Initializing MinIO Client for endpoint: {}", endpoint);
-            io.minio.MinioClient.Builder builder = MinioClient.builder().endpoint(endpoint);
-            if (sessionToken != null && !sessionToken.trim().isEmpty()) {
-                builder.credentialsProvider(new StaticProvider(accessKey, secretKey, sessionToken));
-            } else {
-                builder.credentials(accessKey, secretKey);
+            MinioClient.Builder builder = MinioClient.builder().endpoint(endpoint);
+
+            if (hasText(region)) {
+                builder.region(region);
             }
+
+            applyCredentials(builder);
             this.minioClient = builder.build();
 
-            // Ensure bucket exists
-            boolean exists = minioClient.bucketExists(
-                    BucketExistsArgs.builder().bucket(bucket).build()
-            );
-            if (!exists) {
-                log.info("Creating storage bucket: {}", bucket);
-                minioClient.makeBucket(
-                        MakeBucketArgs.builder().bucket(bucket).build()
-                );
-            }
-
-            // Always ensure the public policy is applied
-            try {
-                String policyJson = """
-                        {
-                          "Version": "2012-10-17",
-                          "Statement": [
-                            {
-                              "Effect": "Allow",
-                              "Principal": {"AWS": ["*"]},
-                              "Action": ["s3:GetObject"],
-                              "Resource": ["arn:aws:s3:::%s/*"]
-                            }
-                          ]
-                        }
-                        """.formatted(bucket);
-                minioClient.setBucketPolicy(
-                        SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
-                );
-            } catch (Exception e) {
-                log.warn("Failed to set bucket policy (it might be blocked by S3 Block Public Access or restricted IAM policy): {}", e.getMessage());
-            }
+            ensureBucketExists();
+            applyPublicReadPolicy();
         } catch (Exception e) {
-            log.error("Failed to initialize MinIO Client / bucket", e);
+            log.error("Failed to initialize storage client for endpoint {}", endpoint, e);
             throw new RuntimeException("MinioStorageService initialization failed", e);
+        }
+    }
+
+    /**
+     * Three credential modes, in order of specificity:
+     *
+     * <ol>
+     *   <li>Static key + session token — temporary STS credentials, passed explicitly.</li>
+     *   <li>Static key + secret — a local MinIO container, or a long-lived IAM user.</li>
+     *   <li>Neither — resolve from the AWS instance metadata service. This is the
+     *       deployed path: the host carries the {@code mercala-app-host} instance
+     *       profile, so no credentials are configured anywhere and nothing expires.</li>
+     * </ol>
+     */
+    private void applyCredentials(MinioClient.Builder builder) {
+        if (hasText(accessKey) && hasText(secretKey)) {
+            if (hasText(sessionToken)) {
+                log.info("Storage client using static credentials with session token, endpoint={}", endpoint);
+                builder.credentialsProvider(new StaticProvider(accessKey, secretKey, sessionToken));
+            } else {
+                log.info("Storage client using static credentials, endpoint={}", endpoint);
+                builder.credentials(accessKey, secretKey);
+            }
+            return;
+        }
+
+        log.info("No static storage credentials configured — resolving from the IAM instance profile, endpoint={}", endpoint);
+        builder.credentialsProvider(new IamAwsProvider(null, null));
+    }
+
+    /**
+     * In the deployed stack Terraform already created the bucket, so this is a no-op
+     * check. It matters for local MinIO, which starts empty.
+     */
+    private void ensureBucketExists() throws Exception {
+        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+        if (!exists) {
+            log.info("Creating storage bucket: {}", bucket);
+            minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        }
+    }
+
+    /**
+     * Local MinIO needs an explicit public-read policy for generated images to be
+     * fetchable by the storefront. On real S3 this is expected to fail — the bucket
+     * has Block Public Access on — so the failure is logged and tolerated rather than
+     * being allowed to kill startup.
+     */
+    private void applyPublicReadPolicy() {
+        try {
+            String policyJson = """
+                    {
+                      "Version": "2012-10-17",
+                      "Statement": [
+                        {
+                          "Effect": "Allow",
+                          "Principal": {"AWS": ["*"]},
+                          "Action": ["s3:GetObject"],
+                          "Resource": ["arn:aws:s3:::%s/*"]
+                        }
+                      ]
+                    }
+                    """.formatted(bucket);
+            minioClient.setBucketPolicy(
+                    SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
+            );
+        } catch (Exception e) {
+            log.warn("Could not set public-read bucket policy on {} (expected on S3 with Block Public Access): {}",
+                    bucket, e.getMessage());
         }
     }
 
     @Override
     public String uploadImage(UUID tenantId, UUID productId, byte[] imageBytes) {
-        String objectName = tenantId.toString() + "/" + productId.toString() + ".png";
+        String objectName = tenantId + "/" + productId + ".png";
+
         try {
             log.info("Uploading image to bucket={} object={}", bucket, objectName);
             try (ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes)) {
@@ -110,8 +154,12 @@ public class MinioStorageService implements StorageService {
             log.info("Successfully uploaded image. URL: {}", url);
             return url;
         } catch (Exception e) {
-            log.error("Failed to upload image to MinIO/S3", e);
+            log.error("Failed to upload image to storage", e);
             throw new RuntimeException("Image upload failure", e);
         }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 }

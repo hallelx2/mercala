@@ -11,15 +11,17 @@
     openai_api_key: "{{ openai_api_key_env }}"
     s3_bucket_name: "{{ s3_bucket_name_env }}"
     s3_endpoint: "https://s3.{{ aws_region }}.amazonaws.com"
-    aws_access_key_id: "{{ aws_access_key_id_env }}"
-    aws_secret_access_key: "{{ aws_secret_access_key_env }}"
-    aws_session_token: "{{ aws_session_token_env | default('') }}"
     ecr_core_url: "{{ ecr_core_url_env }}"
     ecr_agent_url: "{{ ecr_agent_url_env }}"
     ecr_image_gen_url: "{{ ecr_image_gen_url_env }}"
     openai_image_model: "{{ openai_image_model_env | default('cogview-3') }}"
-    image_gen_provider: "{{ image_gen_provider_env | default('pollinations') }}"
+    image_gen_provider: "{{ image_gen_provider_env | default('replicate') }}"
+    replicate_api_token: "{{ replicate_api_token_env | default('') }}"
+    replicate_model: "{{ replicate_model_env | default('black-forest-labs/flux-schnell') }}"
     aws_region: "us-east-1"
+    # No AWS credentials here by design. The host carries an IAM instance profile
+    # (mercala-app-host), so the AWS CLI and the S3 client in mercala-image-gen resolve
+    # short-lived credentials from instance metadata on their own.
 
   tasks:
     - name: Update apt repository cache
@@ -97,13 +99,10 @@
       args:
         creates: /usr/local/bin/aws
 
+    # Credentials come from the instance profile via IMDS — nothing is passed in.
     - name: Authenticate Docker with AWS ECR
       shell: |
         aws ecr get-login-password --region {{ aws_region }} | docker login --username AWS --password-stdin {{ ecr_core_url.split('/')[0] }}
-      environment:
-        AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
-        AWS_SESSION_TOKEN: "{{ aws_session_token }}"
 
     - name: Create application deployment directory
       file:
@@ -145,10 +144,6 @@
         minute: "0"
         hour: "2"
         job: >
-          docker exec -t $(docker ps -qf "name=db") pg_dump -U {{ db_user }} {{ db_name }} | 
-          gzip | 
+          docker exec -t $(docker ps -qf "name=db") pg_dump -U {{ db_user }} {{ db_name }} |
+          gzip |
           aws s3 cp - s3://{{ s3_bucket_name }}/backups/db-backup-$(date +\%F).sql.gz
-      environment:
-        AWS_ACCESS_KEY_ID: "{{ aws_access_key_id }}"
-        AWS_SECRET_ACCESS_KEY: "{{ aws_secret_access_key }}"
-        AWS_SESSION_TOKEN: "{{ aws_session_token }}"
