@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -61,7 +62,7 @@ public class ImageProviderRouter implements ImageProvider {
                 // itself would recurse forever.
                 .filter(provider -> !(provider instanceof ImageProviderRouter))
                 .collect(Collectors.toMap(
-                        provider -> provider.name().toLowerCase(),
+                        provider -> provider.name().toLowerCase(Locale.ROOT),
                         Function.identity(),
                         (first, second) -> first,
                         java.util.LinkedHashMap::new));
@@ -171,7 +172,12 @@ public class ImageProviderRouter implements ImageProvider {
         return call.get();
     }
 
+    /**
+     * Provider names are configuration identifiers, not user-facing text, so the locale
+     * is pinned. Default-locale lowercasing would map "OPENAI" to "openaı" under a
+     * Turkish locale and the lookup would silently miss.
+     */
     private static String normalize(String value) {
-        return value == null ? "" : value.trim().toLowerCase();
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 }

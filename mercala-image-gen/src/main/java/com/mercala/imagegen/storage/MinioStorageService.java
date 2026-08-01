@@ -14,12 +14,16 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
 public class MinioStorageService implements StorageService {
 
     private static final Logger log = LoggerFactory.getLogger(MinioStorageService.class);
+
+    /** The local MinIO container's default access key, as set in docker-compose.yml. */
+    private static final String LOCAL_DEV_ACCESS_KEY = "minioadmin";
 
     private final String endpoint;
     private final String accessKey;
@@ -77,6 +81,20 @@ public class MinioStorageService implements StorageService {
      * </ol>
      */
     private void applyCredentials(MinioClient.Builder builder) {
+        if (isLocalDevCredentialAgainstRealS3()) {
+            // The deployed Compose template must set these blank so the instance profile
+            // is used. If it ever omits them instead, application.yml's local-MinIO
+            // defaults apply and the container would authenticate to real S3 as
+            // "minioadmin" — which fails confusingly rather than falling back. Ignoring
+            // them here turns a silent misconfiguration into a warning plus the correct
+            // behaviour.
+            log.warn("Ignoring local MinIO development credentials against the AWS S3 endpoint {} — "
+                    + "resolving from the IAM instance profile instead. Set MINIO_ACCESS_KEY and "
+                    + "MINIO_SECRET_KEY to empty strings in the deployed environment.", endpoint);
+            builder.credentialsProvider(new IamAwsProvider(null, null));
+            return;
+        }
+
         if (hasText(accessKey) && hasText(secretKey)) {
             if (hasText(sessionToken)) {
                 log.info("Storage client using static credentials with session token, endpoint={}", endpoint);
@@ -161,6 +179,17 @@ public class MinioStorageService implements StorageService {
             log.error("Failed to upload image to storage", e);
             throw new RuntimeException("Image upload failure", e);
         }
+    }
+
+    /**
+     * "minioadmin" is the local MinIO container's default and can never be a real AWS
+     * access key id, so seeing it pointed at an AWS endpoint is unambiguously a
+     * configuration leak from local defaults rather than a deliberate choice.
+     */
+    boolean isLocalDevCredentialAgainstRealS3() {
+        return endpoint != null
+                && endpoint.toLowerCase(Locale.ROOT).contains("amazonaws.com")
+                && LOCAL_DEV_ACCESS_KEY.equals(accessKey == null ? null : accessKey.trim());
     }
 
     private static boolean hasText(String value) {

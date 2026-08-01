@@ -108,9 +108,14 @@ services:
       REPLICATE_MODEL: {{ replicate_model | default('black-forest-labs/flux-schnell') }}
       MINIO_ENDPOINT: {{ s3_endpoint }}
       MINIO_BUCKET: {{ s3_bucket_name }}
-      # No MINIO_ACCESS_KEY / MINIO_SECRET_KEY: leaving them empty makes the storage
-      # client fall back to the AWS default credential chain, which resolves the host's
-      # IAM instance profile from instance metadata.
+      # Explicitly blank, not omitted. application.yml defaults these to "minioadmin"
+      # for local MinIO, so omitting them here would leave the container authenticating
+      # to real S3 with minioadmin/minioadmin instead of the instance profile. Blank
+      # values are what make the storage client resolve credentials from instance
+      # metadata.
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      MINIO_SESSION_TOKEN: ""
       AWS_REGION: {{ aws_region }}
       JAVA_OPTS: "-Xmx256m -Xms128m"
     depends_on:

@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Routing and fallback behaviour. Resilience registries are absent here so the router
  * calls providers directly — circuit-breaker integration is covered by
- * {@link OpenAiImageResilienceIntegrationTest}.
+ * {@link ImageProviderResilienceIntegrationTest}.
  */
 class ImageProviderRouterTest {
 
