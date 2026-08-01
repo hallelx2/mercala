@@ -22,6 +22,9 @@ resource "aws_spot_instance_request" "app_server" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.app_sg.id]
 
+  # Gives the host ECR pull + S3 access without any static credentials.
+  iam_instance_profile = aws_iam_instance_profile.app_host.name
+
   root_block_device {
     volume_size           = 30
     volume_type           = "gp3"

@@ -74,12 +74,15 @@ jobs:
           name: image-gen-jar
           path: mercala-image-gen/target/
 
+      # Assumes the deploy role via GitHub OIDC. No access keys anywhere — the only
+      # thing configured in GitHub is the role ARN, which is not a secret. STS hands
+      # back short-lived credentials scoped to this run and expires them afterwards.
+      # The role is created once by devops/terraform/bootstrap.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: mercala-deploy-${{ github.run_id }}
           aws-region: us-east-1
 
       - name: Log in to AWS ECR
@@ -134,26 +137,57 @@ jobs:
           sudo apt-get install -y ansible
 
       - name: Set up SSH Private Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/mercala-deploy-key.pem
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/mercala-deploy-key.pem
           chmod 600 ~/.ssh/mercala-deploy-key.pem
 
+      # Secrets and variables are passed through `env:` rather than interpolated into
+      # the shell string. GitHub expands ${{ }} before the shell parses the script, so a
+      # value containing a quote would otherwise break out of its quoting and execute as
+      # shell. Extra-vars are then handed to Ansible as a JSON file built by jq, which
+      # escapes correctly regardless of content and keeps secrets off the process list.
       - name: Run Ansible Playbook
+        env:
+          TARGET_HOST: ${{ steps.tf-outputs.outputs.public_ip }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          S3_BUCKET_NAME: ${{ steps.tf-outputs.outputs.s3_bucket_name }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          OPENAI_IMAGE_MODEL: ${{ vars.OPENAI_IMAGE_MODEL }}
+          IMAGE_GEN_PROVIDER: ${{ vars.IMAGE_GEN_PROVIDER }}
+          CLOUDFLARE_IMAGE_MODEL: ${{ vars.CLOUDFLARE_IMAGE_MODEL }}
+          REPLICATE_MODEL: ${{ vars.REPLICATE_MODEL }}
         run: |
-          ansible-playbook -i "${{ steps.tf-outputs.outputs.public_ip }}," devops/ansible/playbook.yml \
+          set -euo pipefail
+          EXTRA_VARS_FILE="$(mktemp)"
+          trap 'rm -f "$EXTRA_VARS_FILE"' EXIT
+
+          jq -n \
+            --arg db_password_env         "$DB_PASSWORD" \
+            --arg jwt_secret_env          "$JWT_SECRET" \
+            --arg openai_api_key_env      "$OPENAI_API_KEY" \
+            --arg s3_bucket_name_env      "$S3_BUCKET_NAME" \
+            --arg ecr_core_url_env        "$ECR_REGISTRY/mercala-core" \
+            --arg ecr_agent_url_env       "$ECR_REGISTRY/mercala-agent" \
+            --arg ecr_image_gen_url_env   "$ECR_REGISTRY/mercala-image-gen" \
+            --arg openai_image_model_env  "$OPENAI_IMAGE_MODEL" \
+            --arg image_gen_provider_env  "$IMAGE_GEN_PROVIDER" \
+            --arg cloudflare_account_id_env  "$CLOUDFLARE_ACCOUNT_ID" \
+            --arg cloudflare_api_token_env   "$CLOUDFLARE_API_TOKEN" \
+            --arg cloudflare_image_model_env "$CLOUDFLARE_IMAGE_MODEL" \
+            --arg replicate_api_token_env "$REPLICATE_API_TOKEN" \
+            --arg replicate_model_env     "$REPLICATE_MODEL" \
+            '$ARGS.named' > "$EXTRA_VARS_FILE"
+
+          ansible-playbook -i "$TARGET_HOST," devops/ansible/playbook.yml \
             -u ubuntu \
             --private-key=~/.ssh/mercala-deploy-key.pem \
             --ssh-common-args="-o StrictHostKeyChecking=no" \
-            --extra-vars "db_password_env='${{ secrets.DB_PASSWORD }}' \
-                          jwt_secret_env='${{ secrets.JWT_SECRET }}' \
-                          openai_api_key_env='${{ secrets.OPENAI_API_KEY }}' \
-                          s3_bucket_name_env='${{ steps.tf-outputs.outputs.s3_bucket_name }}' \
-                          aws_access_key_id_env='${{ secrets.AWS_ACCESS_KEY_ID }}' \
-                          aws_secret_access_key_env='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
-                          aws_session_token_env='${{ secrets.AWS_SESSION_TOKEN }}' \
-                          ecr_core_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-core' \
-                          ecr_agent_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-agent' \
-                          openai_image_model_env='${{ secrets.OPENAI_IMAGE_MODEL }}' \
-                          image_gen_provider_env='${{ secrets.IMAGE_GEN_PROVIDER }}' \
-                          ecr_image_gen_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-image-gen'"
+            --extra-vars "@$EXTRA_VARS_FILE"

@@ -100,12 +100,23 @@ services:
       SPRING_AI_OPENAI_API_KEY: {{ openai_api_key }}
       SPRING_AI_OPENAI_BASE_URL: {{ openai_base_url | default('https://generativelanguage.googleapis.com/v1beta/openai') }}
       SPRING_AI_OPENAI_IMAGE_OPTIONS_MODEL: {{ openai_image_model | default('cogview-3') }}
-      MERCALA_IMAGE_GEN_PROVIDER: {{ image_gen_provider | default('pollinations') }}
+      MERCALA_IMAGE_GEN_PROVIDER: {{ image_gen_provider | default('cloudflare') }}
+      CLOUDFLARE_ACCOUNT_ID: "{{ cloudflare_account_id }}"
+      CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+      CLOUDFLARE_IMAGE_MODEL: "{{ cloudflare_image_model | default('@cf/black-forest-labs/flux-1-schnell') }}"
+      REPLICATE_API_TOKEN: "{{ replicate_api_token }}"
+      REPLICATE_MODEL: {{ replicate_model | default('black-forest-labs/flux-schnell') }}
       MINIO_ENDPOINT: {{ s3_endpoint }}
-      MINIO_ACCESS_KEY: {{ aws_access_key_id }}
-      MINIO_SECRET_KEY: {{ aws_secret_access_key }}
-      MINIO_SESSION_TOKEN: "{{ aws_session_token }}"
       MINIO_BUCKET: {{ s3_bucket_name }}
+      # Explicitly blank, not omitted. application.yml defaults these to "minioadmin"
+      # for local MinIO, so omitting them here would leave the container authenticating
+      # to real S3 with minioadmin/minioadmin instead of the instance profile. Blank
+      # values are what make the storage client resolve credentials from instance
+      # metadata.
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      MINIO_SESSION_TOKEN: ""
+      AWS_REGION: {{ aws_region }}
       JAVA_OPTS: "-Xmx256m -Xms128m"
     depends_on:
       - kafka
