@@ -74,12 +74,15 @@ jobs:
           name: image-gen-jar
           path: mercala-image-gen/target/
 
+      # Assumes the deploy role via GitHub OIDC. No access keys anywhere — the only
+      # thing configured in GitHub is the role ARN, which is not a secret. STS hands
+      # back short-lived credentials scoped to this run and expires them afterwards.
+      # The role is created once by devops/terraform/bootstrap.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: mercala-deploy-${{ github.run_id }}
           aws-region: us-east-1
 
       - name: Log in to AWS ECR
@@ -149,11 +152,10 @@ jobs:
                           jwt_secret_env='${{ secrets.JWT_SECRET }}' \
                           openai_api_key_env='${{ secrets.OPENAI_API_KEY }}' \
                           s3_bucket_name_env='${{ steps.tf-outputs.outputs.s3_bucket_name }}' \
-                          aws_access_key_id_env='${{ secrets.AWS_ACCESS_KEY_ID }}' \
-                          aws_secret_access_key_env='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
-                          aws_session_token_env='${{ secrets.AWS_SESSION_TOKEN }}' \
                           ecr_core_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-core' \
                           ecr_agent_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-agent' \
-                          openai_image_model_env='${{ secrets.OPENAI_IMAGE_MODEL }}' \
-                          image_gen_provider_env='${{ secrets.IMAGE_GEN_PROVIDER }}' \
-                          ecr_image_gen_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-image-gen'"
+                          ecr_image_gen_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-image-gen' \
+                          openai_image_model_env='${{ vars.OPENAI_IMAGE_MODEL }}' \
+                          image_gen_provider_env='${{ vars.IMAGE_GEN_PROVIDER }}' \
+                          replicate_api_token_env='${{ secrets.REPLICATE_API_TOKEN }}' \
+                          replicate_model_env='${{ vars.REPLICATE_MODEL }}'"
