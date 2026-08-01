@@ -30,8 +30,25 @@ mercala:
   image-gen:
     # Primary provider, then the ordered chain tried when it fails or is unconfigured.
     # 'placeholder' is local and cannot fail, so it anchors the chain.
-    provider: ${MERCALA_IMAGE_GEN_PROVIDER:pollinations}
+    provider: ${MERCALA_IMAGE_GEN_PROVIDER:replicate}
     fallback-chain: ${MERCALA_IMAGE_GEN_FALLBACK_CHAIN:pollinations,placeholder}
+    replicate:
+      api-token: ${REPLICATE_API_TOKEN:}
+      model: ${REPLICATE_MODEL:black-forest-labs/flux-schnell}
+      wait: ${REPLICATE_WAIT:60s}
+      poll-timeout: ${REPLICATE_POLL_TIMEOUT:120s}
+      poll-interval: ${REPLICATE_POLL_INTERVAL:1500ms}
+      # Model inputs, sent alongside `prompt`. These match flux-schnell's schema —
+      # it takes aspect_ratio, NOT width/height. Change these when changing the model.
+      # Bracketed keys stop Spring's relaxed binding from mangling the underscores, and
+      # the quoting keeps YAML from reading "1:1" as a nested mapping.
+      input:
+        "[aspect_ratio]": "${REPLICATE_ASPECT_RATIO:1:1}"
+        # Overrides the model's webp default. Storage sniffs the real format regardless,
+        # but png keeps product imagery in the most widely supported format.
+        "[output_format]": "${REPLICATE_OUTPUT_FORMAT:png}"
+        "[output_quality]": "${REPLICATE_OUTPUT_QUALITY:90}"
+        "[num_outputs]": "1"
     pollinations:
       timeout-seconds: ${POLLINATIONS_TIMEOUT_SECONDS:20}
   kafka:
@@ -64,6 +81,11 @@ resilience4j:
       # failing backend opens only its own circuit and the chain moves on to the next.
       openai-image:
         baseConfig: default
+      replicate-image:
+        baseConfig: default
+        # Replicate holds the connection open while the model runs, so a slow call is
+        # normal rather than a symptom.
+        slowCallDurationThreshold: 65s
       pollinations-image:
         baseConfig: default
   retry:
@@ -74,10 +96,14 @@ resilience4j:
         enableExponentialBackoff: true
         exponentialBackoffMultiplier: 2
     instances:
-      # One instance per remote provider. The router names them "<provider>-image", so a
-      # failing backend opens only its own circuit and the chain moves on to the next.
       openai-image:
         baseConfig: default
+      replicate-image:
+        baseConfig: default
+        # Fewer attempts: each one can occupy a full wait budget, and the chain already
+        # provides a cheaper way to recover. Backoff settings stay inherited — setting
+        # waitDuration here as well would collide with the inherited interval function.
+        maxAttempts: 2
       pollinations-image:
         baseConfig: default
 
