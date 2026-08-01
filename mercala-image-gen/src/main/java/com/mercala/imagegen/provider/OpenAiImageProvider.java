@@ -10,6 +10,10 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -26,11 +30,18 @@ import java.util.Optional;
 public class OpenAiImageProvider implements ImageProvider {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiImageProvider.class);
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(60);
 
     private final ImageModel imageModel;
+    private final HttpClient httpClient;
 
     public OpenAiImageProvider(Optional<ImageModel> imageModel) {
         this.imageModel = imageModel.orElse(null);
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
     }
 
     @Override
@@ -71,17 +82,43 @@ public class OpenAiImageProvider implements ImageProvider {
         String url = response.getResult().getOutput().getUrl();
         if (url != null && !url.isBlank()) {
             log.info("ImageModel returned a URL; downloading from {}", url);
-            try (var inputStream = URI.create(url).toURL().openStream()) {
-                byte[] bytes = inputStream.readAllBytes();
-                if (bytes.length == 0) {
-                    throw new ImageGenerationException("ImageModel URL returned an empty body");
-                }
-                return bytes;
-            } catch (IOException e) {
-                throw new ImageGenerationException("Failed to download image from " + url, e);
-            }
+            return download(url);
         }
 
         throw new ImageGenerationException("ImageModel returned neither b64_json nor url");
+    }
+
+    /**
+     * {@code URL.openStream()} applies neither a connect nor a read timeout, so a stalled
+     * image host would pin the consumer thread indefinitely. The router's circuit breaker
+     * records the slow call but cannot interrupt it, so the bound has to live here.
+     */
+    private byte[] download(String url) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(READ_TIMEOUT)
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        } catch (IOException e) {
+            throw new ImageGenerationException("Failed to download image from " + url, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ImageGenerationException("Interrupted downloading image from " + url, e);
+        }
+
+        if (response.statusCode() != 200) {
+            throw new ImageGenerationException(
+                    "Downloading image from " + url + " returned status " + response.statusCode());
+        }
+
+        byte[] bytes = response.body();
+        if (bytes == null || bytes.length == 0) {
+            throw new ImageGenerationException("ImageModel URL returned an empty body");
+        }
+        return bytes;
     }
 }

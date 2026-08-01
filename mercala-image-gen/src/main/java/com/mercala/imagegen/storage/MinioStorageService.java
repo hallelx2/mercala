@@ -106,7 +106,16 @@ public class MinioStorageService implements StorageService {
             return;
         }
 
-        log.info("No static storage credentials configured — resolving from the IAM instance profile, endpoint={}", endpoint);
+        // Exactly one of the pair being set is always a mistake — a typo or a half-filled
+        // environment. Falling through silently would make it look like the instance
+        // profile was chosen deliberately, so say so.
+        if (hasText(accessKey) != hasText(secretKey)) {
+            log.warn("Only one of the storage access key / secret key is set — ignoring the partial pair "
+                    + "and resolving from the IAM instance profile. This is almost certainly a "
+                    + "configuration error.");
+        } else {
+            log.info("No static storage credentials configured — resolving from the IAM instance profile, endpoint={}", endpoint);
+        }
         builder.credentialsProvider(new IamAwsProvider(null, null));
     }
 

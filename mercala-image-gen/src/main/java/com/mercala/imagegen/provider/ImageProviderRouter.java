@@ -84,6 +84,16 @@ public class ImageProviderRouter implements ImageProvider {
             log.warn("Configured image provider '{}' is not a registered provider — falling through to {}",
                     primaryProvider, fallbackChain);
         }
+
+        // Surface typos at startup rather than as a silent skip on the first request that
+        // needed the provider.
+        List<String> unknown = chain.stream()
+                .filter(name -> !providersByName.containsKey(name))
+                .toList();
+        if (!unknown.isEmpty()) {
+            log.warn("Image provider chain references unknown providers {} — these will be skipped. Registered: {}",
+                    unknown, providersByName.keySet());
+        }
         if (chain.stream().noneMatch(name -> {
             ImageProvider provider = providersByName.get(name);
             return provider != null && !provider.isRemote();

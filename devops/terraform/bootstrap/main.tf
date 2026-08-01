@@ -185,7 +185,6 @@ data "aws_iam_policy_document" "deploy" {
       "iam:ListInstanceProfilesForRole",
       "iam:ListPolicyVersions",
       "iam:ListRolePolicies",
-      "iam:PassRole",
       "iam:PutRolePolicy",
       "iam:RemoveRoleFromInstanceProfile",
       "iam:TagInstanceProfile",
@@ -197,6 +196,28 @@ data "aws_iam_policy_document" "deploy" {
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${var.project_name}-*",
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:instance-profile/${var.project_name}-*",
     ]
+  }
+
+  ##
+  # PassRole is separated out so it can carry an iam:PassedToService condition.
+  #
+  # Without that condition, holding PassRole over the mercala-* namespace would let the
+  # deploy role hand any project role — including its own, which can create and attach
+  # IAM policies — to any service that accepts one. That is a privilege-escalation path.
+  # Restricting the target service to EC2 keeps it to what the deploy actually does:
+  # attach the app-host instance profile to the spot instance.
+  ##
+  statement {
+    sid       = "PassInstanceRoleToEc2Only"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ec2.amazonaws.com"]
+    }
   }
 }
 
