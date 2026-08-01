@@ -38,25 +38,26 @@ class CloudflareImageProviderLiveTest {
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    /**
+     * Deliberately one test doing one generation, not two tests doing two. Every
+     * assertion here is about the same response, and each extra test method would spend
+     * another image from the daily free allowance for no additional coverage.
+     */
     @Test
-    void generatesARealImage() {
+    void generatesARealImageAndItsFormatIsDetectedFromTheBytes() {
         byte[] bytes = provider().generateImage("studio product photo of a red leather sneaker on a white background");
 
         assertThat(bytes).isNotNull().isNotEmpty();
         assertThat(bytes.length)
                 .as("a real generated image should be substantially larger than an error payload")
                 .isGreaterThan(10_000);
-    }
-
-    @Test
-    void detectedFormatMatchesWhatCloudflareActuallyReturns() {
-        byte[] bytes = provider().generateImage("a plain blue square");
 
         ImageFormat format = ImageFormat.detect(bytes);
 
         // flux-1-schnell returns JPEG despite the base64 field being described only as
-        // "image". Storing it as .png/image/png — as the pipeline did before HAL-423 —
-        // would produce a file whose declared type contradicts its bytes.
+        // "image", and there is no output_format input to request otherwise. Storing it
+        // as .png/image/png — as the pipeline did before HAL-423 — would produce a file
+        // whose declared type contradicts its bytes.
         assertThat(format)
                 .as("format must be sniffed, not assumed")
                 .isIn(ImageFormat.JPEG, ImageFormat.PNG, ImageFormat.WEBP);
@@ -65,6 +66,7 @@ class CloudflareImageProviderLiveTest {
 
     @Test
     void reportsAvailableWithRealCredentials() {
+        // No generation call: availability is a credential check, so this costs nothing.
         assertThat(provider().isAvailable()).isTrue();
     }
 }

@@ -29,11 +29,17 @@ variable "allowed_git_refs" {
   # The warning above is only a comment, and comments do not stop a future edit. This
   # makes the constraint fail at plan time instead of silently granting every branch on
   # the repository the ability to assume the deploy role.
+  #
+  # Rejects "*" at ANY position, not just a bare or leading one. The earlier version
+  # only caught "*", "**" and leading asterisks, so "refs/heads/*" passed — and that is
+  # the genuinely dangerous value: the STS trust policy matches the sub claim with
+  # StringLike, so it would authorize every branch on the repository, including a branch
+  # pushed by an outside pull request.
   validation {
     condition = alltrue([
-      for ref in var.allowed_git_refs : ref != "*" && ref != "**" && !startswith(ref, "*")
+      for ref in var.allowed_git_refs : !strcontains(ref, "*") && !strcontains(ref, "?")
     ])
-    error_message = "allowed_git_refs must not be a bare wildcard — that would let any branch or pull request assume the deploy role. Name the refs explicitly, e.g. [\"refs/heads/main\"]."
+    error_message = "allowed_git_refs must not contain wildcard characters (* or ?) anywhere. The OIDC trust policy matches with StringLike, so a pattern like \"refs/heads/*\" would let any branch — including one from a pull request — assume the deploy role. Name each ref explicitly, e.g. [\"refs/heads/main\"]."
   }
 
   validation {
