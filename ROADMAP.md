@@ -117,8 +117,10 @@ One-line: the model layer is swappable and costs nothing to run by default.
 - [x] Cloudflare Workers AI provider — free daily allowance, handles both the base64 JSON
       envelope (flux) and raw binary (SDXL) response shapes; now the default primary
 - [x] Image format detection from magic bytes (providers return PNG *and* JPEG *and* WebP)
-- [ ] Set `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` — code is done and tested, but
-      unverified against the live API until credentials exist
+- [x] **Verified live** — `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` set, real images
+      generated through the Java provider (~230–260 KB, ~3s). Confirmed flux-1-schnell
+      returns **JPEG**, not PNG, which is precisely why format sniffing exists.
+      Opt-in `CloudflareImageProviderLiveTest` re-runs this whenever creds are present.
 - [ ] (opt) Add Replicate credit — account authenticates but returns **402 Insufficient
       credit**. Not urgent now that Cloudflare leads the chain.
 - [ ] Decide: migrate embeddings off 1536-dim zero-padding to native ONNX size *(HAL-360)*
