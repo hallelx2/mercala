@@ -48,12 +48,19 @@ logs/
 
 # Terraform (covers the root stack and devops/terraform/bootstrap)
 **/.terraform/
-**/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+# Variable files can carry secrets. *.tfvars alone does not match the JSON variants,
+# so match those explicitly rather than leaving a gap.
 *.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
 !*.tfvars.example
 crash.log
+# NOTE: .terraform.lock.hcl IS committed, deliberately. It pins provider versions and
+# hashes, so CI resolves the same providers the change was tested against. Ignoring it
+# would let a deploy silently pick up a new provider release.
 
 # DevOps secrets (never commit)
 devops/*.pem

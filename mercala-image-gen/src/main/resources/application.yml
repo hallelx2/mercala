@@ -99,9 +99,15 @@ resilience4j:
         baseConfig: default
       replicate-image:
         baseConfig: default
-        # Replicate holds the connection open while the model runs, so a slow call is
-        # normal rather than a symptom.
-        slowCallDurationThreshold: 65s
+        # Replicate is legitimately slow by design: it holds the connection open for the
+        # wait budget (60s) and then polls for up to poll-timeout (120s), so a successful
+        # cold-start generation can take ~180s. At the inherited 5s threshold — or even
+        # 65s — those successful calls would be counted slow, and a 50% slow-call rate
+        # would open the circuit on a provider that is working correctly.
+        #
+        # Set above the worst realistic case so only pathological calls register. Failure
+        # rate, not duration, is the meaningful health signal for this provider.
+        slowCallDurationThreshold: 190s
       pollinations-image:
         baseConfig: default
   retry:
