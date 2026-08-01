@@ -111,12 +111,16 @@ One-line: the model layer is swappable and costs nothing to run by default.
 - [x] Groq tool-calling format fix
 - [x] JWT-delegated agent chat endpoints + GLM-4.7 routed via nginx
 - [x] Local offline ONNX embedding model, zero-padded to 1536 dims
-- [x] **Real provider adapters** — `openai` / `replicate` / `pollinations` / `placeholder`,
-      one class each, selected and chained by `ImageProviderRouter`
+- [x] **Real provider adapters** — `cloudflare` / `replicate` / `openai` / `pollinations` /
+      `placeholder`, one class each, selected and chained by `ImageProviderRouter`
 - [x] Replicate provider — `Prefer: wait` fast path, polling fallback, per-model input map
+- [x] Cloudflare Workers AI provider — free daily allowance, handles both the base64 JSON
+      envelope (flux) and raw binary (SDXL) response shapes; now the default primary
 - [x] Image format detection from magic bytes (providers return PNG *and* JPEG *and* WebP)
-- [ ] Add Replicate credit — account authenticates but returns **402 Insufficient credit**,
-      so the chain currently serves Pollinations in production
+- [ ] Set `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` — code is done and tested, but
+      unverified against the live API until credentials exist
+- [ ] (opt) Add Replicate credit — account authenticates but returns **402 Insufficient
+      credit**. Not urgent now that Cloudflare leads the chain.
 - [ ] Decide: migrate embeddings off 1536-dim zero-padding to native ONNX size *(HAL-360)*
 - [?] Per-tenant provider/model selection, the way payments already does it
 - [?] AI product copy generation (descriptions, SEO) — the third agent surface

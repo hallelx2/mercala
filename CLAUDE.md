@@ -65,7 +65,9 @@ Never commit `devops/*.pem`, any `*.tfstate*`, `.env`, or `devops/deploy.sh` —
 
 ## Image generation
 
-`mercala-image-gen` selects a provider via `mercala.image-gen.provider` and degrades through `mercala.image-gen.fallback-chain`. One class per backend (`OpenAiImageProvider`, `ReplicateImageProvider`, `PollinationsImageProvider`, `PlaceholderImageProvider`); `ImageProviderRouter` owns selection, fallback, and per-provider circuit breaking.
+`mercala-image-gen` selects a provider via `mercala.image-gen.provider` and degrades through `mercala.image-gen.fallback-chain`. One class per backend (`CloudflareImageProvider`, `ReplicateImageProvider`, `OpenAiImageProvider`, `PollinationsImageProvider`, `PlaceholderImageProvider`); `ImageProviderRouter` owns selection, fallback, and per-provider circuit breaking.
+
+Default chain is `cloudflare → replicate → pollinations → placeholder`. Cloudflare Workers AI leads because it runs on a recurring daily free allowance rather than prepaid credit, so the default configuration costs nothing. Workers AI response shape varies by model family — `flux-1-schnell` returns base64 inside the JSON envelope, the SDXL models return raw bytes — so `CloudflareImageProvider` branches on content type, not on model name.
 
 Adding a provider means adding a class that implements `ImageProvider` — never adding a branch to an existing one. Providers throw on failure; they must not substitute another backend's result.
 
