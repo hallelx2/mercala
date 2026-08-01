@@ -30,8 +30,22 @@ mercala:
   image-gen:
     # Primary provider, then the ordered chain tried when it fails or is unconfigured.
     # 'placeholder' is local and cannot fail, so it anchors the chain.
-    provider: ${MERCALA_IMAGE_GEN_PROVIDER:replicate}
-    fallback-chain: ${MERCALA_IMAGE_GEN_FALLBACK_CHAIN:pollinations,placeholder}
+    provider: ${MERCALA_IMAGE_GEN_PROVIDER:cloudflare}
+    # Cloudflare runs on a recurring daily free allowance, Replicate on prepaid credit.
+    # Cloudflare leads so the default configuration costs nothing; providers reporting
+    # themselves unconfigured are skipped, not treated as failures.
+    fallback-chain: ${MERCALA_IMAGE_GEN_FALLBACK_CHAIN:replicate,pollinations,placeholder}
+    cloudflare:
+      account-id: ${CLOUDFLARE_ACCOUNT_ID:}
+      api-token: ${CLOUDFLARE_API_TOKEN:}
+      model: ${CLOUDFLARE_IMAGE_MODEL:@cf/black-forest-labs/flux-1-schnell}
+      timeout: ${CLOUDFLARE_TIMEOUT:60s}
+      # Workers AI rejects prompts beyond this; the provider truncates rather than fails.
+      max-prompt-length: 2048
+      # flux-1-schnell caps steps at 8 and defaults to 4. SDXL models take num_steps,
+      # width, height and negative_prompt instead — change these when changing model.
+      input:
+        "[steps]": "${CLOUDFLARE_STEPS:4}"
     replicate:
       api-token: ${REPLICATE_API_TOKEN:}
       model: ${REPLICATE_MODEL:black-forest-labs/flux-schnell}
@@ -81,6 +95,8 @@ resilience4j:
       # failing backend opens only its own circuit and the chain moves on to the next.
       openai-image:
         baseConfig: default
+      cloudflare-image:
+        baseConfig: default
       replicate-image:
         baseConfig: default
         # Replicate holds the connection open while the model runs, so a slow call is
@@ -97,6 +113,8 @@ resilience4j:
         exponentialBackoffMultiplier: 2
     instances:
       openai-image:
+        baseConfig: default
+      cloudflare-image:
         baseConfig: default
       replicate-image:
         baseConfig: default
