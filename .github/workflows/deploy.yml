@@ -157,5 +157,8 @@ jobs:
                           ecr_image_gen_url_env='${{ steps.login-ecr.outputs.registry }}/mercala-image-gen' \
                           openai_image_model_env='${{ vars.OPENAI_IMAGE_MODEL }}' \
                           image_gen_provider_env='${{ vars.IMAGE_GEN_PROVIDER }}' \
+                          cloudflare_account_id_env='${{ secrets.CLOUDFLARE_ACCOUNT_ID }}' \
+                          cloudflare_api_token_env='${{ secrets.CLOUDFLARE_API_TOKEN }}' \
+                          cloudflare_image_model_env='${{ vars.CLOUDFLARE_IMAGE_MODEL }}' \
                           replicate_api_token_env='${{ secrets.REPLICATE_API_TOKEN }}' \
                           replicate_model_env='${{ vars.REPLICATE_MODEL }}'"
