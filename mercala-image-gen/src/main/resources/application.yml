@@ -27,6 +27,13 @@ mercala:
     session-token: ${MINIO_SESSION_TOKEN:}
     region: ${AWS_REGION:}
     bucket: ${MINIO_BUCKET:mercala-images}
+  image-gen:
+    # Primary provider, then the ordered chain tried when it fails or is unconfigured.
+    # 'placeholder' is local and cannot fail, so it anchors the chain.
+    provider: ${MERCALA_IMAGE_GEN_PROVIDER:pollinations}
+    fallback-chain: ${MERCALA_IMAGE_GEN_FALLBACK_CHAIN:pollinations,placeholder}
+    pollinations:
+      timeout-seconds: ${POLLINATIONS_TIMEOUT_SECONDS:20}
   kafka:
     product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
     image-requests-topic: ${MERCALA_KAFKA_IMAGE_REQUESTS_TOPIC:image.requests}
@@ -53,7 +60,11 @@ resilience4j:
         slowCallRateThreshold: 50
         slowCallDurationThreshold: 5s
     instances:
+      # One instance per remote provider. The router names them "<provider>-image", so a
+      # failing backend opens only its own circuit and the chain moves on to the next.
       openai-image:
+        baseConfig: default
+      pollinations-image:
         baseConfig: default
   retry:
     configs:
@@ -63,6 +74,10 @@ resilience4j:
         enableExponentialBackoff: true
         exponentialBackoffMultiplier: 2
     instances:
+      # One instance per remote provider. The router names them "<provider>-image", so a
+      # failing backend opens only its own circuit and the chain moves on to the next.
       openai-image:
+        baseConfig: default
+      pollinations-image:
         baseConfig: default
 
