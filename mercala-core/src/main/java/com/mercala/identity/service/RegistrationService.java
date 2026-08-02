@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.mercala.identity.AppUser;
 import com.mercala.identity.AppUserRepository;
 import com.mercala.identity.Role;
+import com.mercala.identity.StoreMembership;
 import com.mercala.identity.Tenant;
 import com.mercala.identity.TenantRepository;
 import com.mercala.identity.exception.ResourceConflictException;
@@ -22,11 +23,15 @@ public class RegistrationService {
 
     private final TenantRepository tenantRepository;
     private final AppUserRepository userRepository;
+    private final com.mercala.identity.StoreMembershipRepository membershipRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public RegistrationService(TenantRepository tenantRepository, AppUserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public RegistrationService(TenantRepository tenantRepository, AppUserRepository userRepository,
+                               com.mercala.identity.StoreMembershipRepository membershipRepository,
+                               PasswordEncoder passwordEncoder) {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
+        this.membershipRepository = membershipRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -46,16 +51,14 @@ public class RegistrationService {
     }
 
     /**
-     * The onboarding step: a storeless user names their store. One store per account —
-     * a second call conflicts rather than silently replacing the first. The claim is a
-     * conditional UPDATE, not read-then-write: two concurrent calls both pass any
-     * in-memory check, but only one can match {@code tenant_id is null}; the loser's
-     * transaction rolls back, taking its freshly inserted tenant with it.
+     * Creates a store for the caller — their first or their fifth (HAL-556). The new
+     * store gets an owner membership and becomes the active one; concurrent calls are
+     * both valid (two real stores, two memberships) and merely race for which ends up
+     * active, which the store switcher makes a non-event.
      */
     public Tenant createStoreFor(java.util.UUID userId, com.mercala.identity.web.dto.CreateStoreRequest request) {
-        if (!userRepository.existsById(userId)) {
-            throw new ResourceNotFoundException("User not found: " + userId);
-        }
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
         if (tenantRepository.existsBySlug(request.slug())) {
             throw new ResourceConflictException("Tenant slug already exists: " + request.slug());
         }
@@ -64,9 +67,9 @@ public class RegistrationService {
         tenant.setDescription(request.description());
         tenant = tenantRepository.save(tenant);
 
-        if (userRepository.attachStoreIfNone(userId, tenant.getId()) == 0) {
-            throw new ResourceConflictException("This account already has a store");
-        }
+        membershipRepository.save(new StoreMembership(userId, tenant.getId(), Role.MERCHANT_OWNER));
+        user.setTenantId(tenant.getId());
+        userRepository.save(user);
         return tenant;
     }
 
@@ -87,7 +90,8 @@ public class RegistrationService {
 
         String hashedPassword = passwordEncoder.encode(request.ownerPassword());
         AppUser owner = new AppUser(tenant.getId(), request.ownerEmail(), hashedPassword, Role.MERCHANT_OWNER);
-        userRepository.save(owner);
+        owner = userRepository.save(owner);
+        membershipRepository.save(new StoreMembership(owner.getId(), tenant.getId(), Role.MERCHANT_OWNER));
 
         return tenant;
     }
@@ -129,7 +133,9 @@ public class RegistrationService {
 
         String hashedPassword = passwordEncoder.encode(request.password());
         AppUser user = new AppUser(tenant.getId(), request.email(), hashedPassword, request.role());
-        return userRepository.save(user);
+        user = userRepository.save(user);
+        membershipRepository.save(new StoreMembership(user.getId(), tenant.getId(), request.role()));
+        return user;
     }
 
     @Transactional(readOnly = true)

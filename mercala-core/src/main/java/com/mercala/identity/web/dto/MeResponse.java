@@ -20,5 +20,7 @@ public record MeResponse(
         String name,
         String tenantSlug,
         String tenantName,
-        String tenantDescription
+        String tenantDescription,
+        /** Every store the caller belongs to (HAL-556) — the switcher's data. */
+        java.util.List<StoreSummary> stores
 ) {}

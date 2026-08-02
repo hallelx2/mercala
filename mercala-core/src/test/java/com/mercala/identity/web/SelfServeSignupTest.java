@@ -126,14 +126,24 @@ class SelfServeSignupTest extends AbstractIntegrationTest {
                                 """))
                 .andExpect(status().isCreated());
 
-        // A second store on the same account is a conflict, not a silent replacement.
-        mockMvc.perform(post("/api/tenants/me")
+        // A second store on the same account is allowed (HAL-556): it becomes the
+        // active one and /me lists both memberships, oldest first.
+        String secondBody = mockMvc.perform(post("/api/tenants/me")
                         .header("Authorization", tenantToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"slug": "%s-two", "name": "Second Store"}
                                 """.formatted(slug)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String secondToken = "Bearer " + JsonPath.read(secondBody, "$.accessToken");
+
+        mockMvc.perform(get("/api/auth/me").header("Authorization", secondToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenantSlug").value(slug + "-two"))
+                .andExpect(jsonPath("$.stores.length()").value(2))
+                .andExpect(jsonPath("$.stores[0].slug").value(slug))
+                .andExpect(jsonPath("$.stores[1].slug").value(slug + "-two"));
     }
 
     @Test

@@ -24,16 +24,19 @@ public class AuthController {
     private final AuthService authService;
     private final TenantRepository tenantRepository;
     private final com.mercala.identity.AppUserRepository userRepository;
+    private final com.mercala.identity.StoreMembershipRepository membershipRepository;
     private final com.mercala.identity.service.RegistrationService registrationService;
     private final com.mercala.platform.security.JwtService jwtService;
 
     public AuthController(AuthService authService, TenantRepository tenantRepository,
                           com.mercala.identity.AppUserRepository userRepository,
+                          com.mercala.identity.StoreMembershipRepository membershipRepository,
                           com.mercala.identity.service.RegistrationService registrationService,
                           com.mercala.platform.security.JwtService jwtService) {
         this.authService = authService;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
+        this.membershipRepository = membershipRepository;
         this.registrationService = registrationService;
         this.jwtService = jwtService;
     }
@@ -62,7 +65,20 @@ public class AuthController {
         return new LoginResponse(result.token(), "Bearer", result.expiresIn());
     }
 
-    /** Authenticated: returns the current principal extracted from the JWT. */
+    /**
+     * Authenticated: switches the session's active store and returns the reissued
+     * token. Membership-gated; a store you don't belong to 404s exactly like one
+     * that doesn't exist.
+     */
+    @PostMapping("/switch-store")
+    public LoginResponse switchStore(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody com.mercala.identity.web.dto.SwitchStoreRequest request) {
+        AuthService.AuthResult result = authService.switchStore(principal.userId(), request.slug());
+        return new LoginResponse(result.token(), "Bearer", result.expiresIn());
+    }
+
+    /** Authenticated: the current principal, their active store, and all their stores. */
     @GetMapping("/me")
     public MeResponse me(@AuthenticationPrincipal AuthenticatedUser principal) {
         Tenant tenant = principal.tenantId() != null
@@ -71,6 +87,21 @@ public class AuthController {
         String userName = userRepository.findById(principal.userId())
                 .map(com.mercala.identity.AppUser::getName)
                 .orElse(null);
+
+        var memberships = membershipRepository.findByUserIdOrderByCreatedAtAsc(principal.userId());
+        var tenantsById = new java.util.HashMap<java.util.UUID, Tenant>();
+        tenantRepository.findAllById(memberships.stream()
+                        .map(com.mercala.identity.StoreMembership::getTenantId).toList())
+                .forEach(t -> tenantsById.put(t.getId(), t));
+        var stores = memberships.stream()
+                .map(m -> {
+                    Tenant t = tenantsById.get(m.getTenantId());
+                    return t == null ? null : new com.mercala.identity.web.dto.StoreSummary(
+                            t.getId(), t.getSlug(), t.getName(), m.getRole());
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
         return new MeResponse(
                 principal.userId(),
                 principal.tenantId(),
@@ -79,6 +110,7 @@ public class AuthController {
                 userName,
                 tenant != null ? tenant.getSlug() : null,
                 tenant != null ? tenant.getName() : null,
-                tenant != null ? tenant.getDescription() : null);
+                tenant != null ? tenant.getDescription() : null,
+                stores);
     }
 }
