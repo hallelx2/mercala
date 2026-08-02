@@ -20,6 +20,19 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>The relationship is documented in {@code application.yml}, but a comment cannot stop
  * someone raising the stream timeout for a slow model and leaving the async timeout behind.
  * This fails the build instead.
+ *
+ * <p><strong>There is a third timeout this test cannot see.</strong> nginx applies
+ * {@code proxy_read_timeout 180s} to the SSE route, and it is the outermost of the chain:
+ *
+ * <pre>
+ *   mercala.agent.stream-timeout       120s   application
+ *   spring.mvc.async.request-timeout   150s   servlet container
+ *   proxy_read_timeout                 180s   nginx  (devops/ansible/templates/nginx.conf.j2)
+ * </pre>
+ *
+ * <p>It lives in an Ansible template rather than Spring configuration, so raising the
+ * application timeout past 180s would pass this test and still produce truncated streams in
+ * production. If you change the values here, change the template too.
  */
 @SpringBootTest(properties = {
         "spring.ai.openai.api-key=dummy",
