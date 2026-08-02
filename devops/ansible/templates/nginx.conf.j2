@@ -14,20 +14,48 @@
 {# default(..., true) so an empty string also falls back — an unset CI variable arrives
    empty rather than undefined, and a blank domain here renders an unloadable config. #}
 {% set domain = server_domain | default('mercalaapi.hallelx2.com', true) %}
+{#
+  Upstreams are addressed through variables, not literal hostnames.
+
+  nginx resolves a literal `proxy_pass http://core:8080` exactly once, when the config
+  loads, and caches that address for the process lifetime. `docker compose up -d` recreates
+  changed services with new container IPs while leaving unchanged ones — such as nginx —
+  running. nginx then proxies to an address nothing is listening on and every request
+  returns 502 until it happens to be restarted. That is a guaranteed outage on any deploy
+  that ships a new application image, which is most of them.
+
+  With a variable in proxy_pass, nginx defers resolution to request time and uses the
+  `resolver` below. Docker's embedded DNS at 127.0.0.11 always knows the current address.
+
+  A variable also disables nginx's automatic URI rewriting, so the agent route that used to
+  rely on the URI part of proxy_pass now does it with an explicit rewrite.
+#}
 {% macro api_routes(burst_default, burst_api) %}
         # Route to mercala-agent
         location /api/v1/agent {
-            proxy_pass http://agent:8082/api/agent;
+            set $agent_upstream agent;
+            rewrite ^/api/v1/agent(.*)$ /api/agent$1 break;
+            proxy_pass http://$agent_upstream:8082;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             limit_req zone=api_limit burst={{ burst_api }} nodelay;
+
+            # SSE: responses must reach the client as they are produced, and the stream
+            # outlives nginx's default 60s read timeout.
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 180s;
+            proxy_set_header Connection '';
+            proxy_http_version 1.1;
+            chunked_transfer_encoding off;
         }
 
         # Route to mercala-image-gen
         location /api/v1/images {
-            proxy_pass http://image-gen:8083;
+            set $imagegen_upstream image-gen;
+            proxy_pass http://$imagegen_upstream:8083;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -37,7 +65,8 @@
 
         # Default route to mercala-core
         location / {
-            proxy_pass http://core:8080;
+            set $core_upstream core;
+            proxy_pass http://$core_upstream:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -57,6 +86,13 @@ http {
 
     # Rate limiting zone for simple security
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+
+    # Docker's embedded DNS. Required for the variable-based proxy_pass upstreams below to
+    # resolve at request time rather than once at config load. ipv6=off because the compose
+    # network is v4-only and nginx would otherwise spend every lookup waiting on an AAAA
+    # query that always fails.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver_timeout 5s;
 
     server {
         listen 80;
