@@ -87,6 +87,7 @@ class ApiDocsTest extends AbstractIntegrationTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/auth/login",
+            "/api/auth/register",
             "/api/tenants",
             "/api/webhooks/stripe",
             "/api/webhooks/paystack",

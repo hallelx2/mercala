@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/docs", "/api/v1/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll() // self-serve signup (HAL-552)
                         .requestMatchers(HttpMethod.POST, "/api/tenants").permitAll()   // public store signup
                         // The storefront: anonymous shoppers browsing a store. GET-only on
                         // purpose — nothing under /api/public may ever mutate.

@@ -71,9 +71,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (token != null) {
                 try {
                     Claims claims = jwtService.parse(token).getPayload();
+                    // tenant_id is absent for users who haven't created their store
+                    // yet (HAL-552) — a valid token, not a malformed one.
+                    String tenantClaim = claims.get("tenant_id", String.class);
                     AuthenticatedUser principal = new AuthenticatedUser(
                             UUID.fromString(claims.getSubject()),
-                            UUID.fromString(claims.get("tenant_id", String.class)),
+                            tenantClaim != null ? UUID.fromString(tenantClaim) : null,
                             claims.get("email", String.class),
                             Role.valueOf(claims.get("role", String.class)));
                     var authentication = new UsernamePasswordAuthenticationToken(

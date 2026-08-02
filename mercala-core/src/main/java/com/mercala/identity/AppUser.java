@@ -21,9 +21,14 @@ import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
 
 /**
- * A user belonging to a tenant. {@code tenantId} is stored as a plain column (the
- * tenant discriminator) so the Hibernate tenant filter + Postgres RLS (HAL-128/129) can
- * scope every query. Email is unique <em>within</em> a tenant.
+ * A user, usually belonging to a tenant. {@code tenantId} is stored as a plain column
+ * (the tenant discriminator) so the Hibernate tenant filter + Postgres RLS (HAL-128/129)
+ * can scope every query. Email is unique <em>within</em> a tenant.
+ *
+ * <p>Since HAL-552 a user can exist <em>without</em> a tenant: someone who signed up but
+ * has not created their store yet. For those rows email is unique globally (partial
+ * index in V18), and {@link #getTenantId()} is null until {@link #setTenantId} attaches
+ * the store they create.
  */
 @Entity
 @Table(
@@ -41,11 +46,15 @@ public class AppUser {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false)
+    @Column(name = "tenant_id")
     private UUID tenantId;
 
     @Column(nullable = false, length = 320)
     private String email;
+
+    /** The person's display name. Nullable: pre-HAL-552 accounts never provided one. */
+    @Column(length = 255)
+    private String name;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
@@ -79,6 +88,19 @@ public class AppUser {
 
     public UUID getTenantId() {
         return tenantId;
+    }
+
+    /** Attaches the store a previously tenantless user just created (HAL-552). */
+    public void setTenantId(UUID tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getEmail() {

@@ -40,15 +40,20 @@ public class JwtService {
 
     public String issue(AppUser user) {
         Instant now = Instant.now();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(user.getId().toString())
-                .claim("tenant_id", user.getTenantId().toString())
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(expirationSeconds)))
-                .signWith(key)
-                .compact();
+                .signWith(key);
+        // Omitted, not null: a user who hasn't created their store yet (HAL-552)
+        // has no tenant to claim. Tenant-scoped routes see no tenant context and
+        // behave as if the store were empty, which it is.
+        if (user.getTenantId() != null) {
+            builder.claim("tenant_id", user.getTenantId().toString());
+        }
+        return builder.compact();
     }
 
     public Jws<Claims> parse(String token) {
