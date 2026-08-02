@@ -14,14 +14,23 @@
     ecr_core_url: "{{ ecr_core_url_env }}"
     ecr_agent_url: "{{ ecr_agent_url_env }}"
     ecr_image_gen_url: "{{ ecr_image_gen_url_env }}"
-    openai_image_model: "{{ openai_image_model_env | default('cogview-3') }}"
-    image_gen_provider: "{{ image_gen_provider_env | default('cloudflare') }}"
-    cloudflare_account_id: "{{ cloudflare_account_id_env | default('') }}"
-    cloudflare_api_token: "{{ cloudflare_api_token_env | default('') }}"
-    cloudflare_image_model: "{{ cloudflare_image_model_env | default('@cf/black-forest-labs/flux-1-schnell') }}"
-    replicate_api_token: "{{ replicate_api_token_env | default('') }}"
-    replicate_model: "{{ replicate_model_env | default('black-forest-labs/flux-schnell') }}"
+    # Every one of these uses default(x, true) — the boolean matters. An unset GitHub
+    # variable or secret reaches Ansible as an empty STRING, not as undefined, and plain
+    # default() only substitutes for undefined. Without the flag, an unset SERVER_DOMAIN
+    # renders server_name and the /etc/letsencrypt/live/<domain> paths blank, producing an
+    # nginx config that cannot load its certificates.
+    openai_image_model: "{{ openai_image_model_env | default('cogview-3', true) }}"
+    image_gen_provider: "{{ image_gen_provider_env | default('cloudflare', true) }}"
+    cloudflare_account_id: "{{ cloudflare_account_id_env | default('', true) }}"
+    cloudflare_api_token: "{{ cloudflare_api_token_env | default('', true) }}"
+    cloudflare_image_model: "{{ cloudflare_image_model_env | default('@cf/black-forest-labs/flux-1-schnell', true) }}"
+    replicate_api_token: "{{ replicate_api_token_env | default('', true) }}"
+    replicate_model: "{{ replicate_model_env | default('black-forest-labs/flux-schnell', true) }}"
     aws_region: "us-east-1"
+    server_domain: "{{ server_domain_env | default('mercalaapi.hallelx2.com', true) }}"
+    # Registering an ACME account is tied to an email address. Leave this unset and the
+    # deploy still succeeds — it just serves HTTP until a certificate exists.
+    certbot_email: "{{ certbot_email_env | default('', true) }}"
     # No AWS credentials here by design. The host carries an IAM instance profile
     # (mercala-app-host), so the AWS CLI and the S3 client in mercala-image-gen resolve
     # short-lived credentials from instance metadata on their own.
@@ -115,6 +124,41 @@
         group: ubuntu
         mode: '0755'
 
+    # ---------------------------------------------------------------------------
+    # TLS certificates.
+    #
+    # The host is a spot instance and is replaced routinely, so anything written to its
+    # root volume is lost on reprovision. Certificates therefore live in S3 and are
+    # restored on boot; without this every rebuild would request a fresh certificate and
+    # burn through Let's Encrypt's limit of 5 duplicate certs per domain per week.
+    # ---------------------------------------------------------------------------
+    - name: Install certbot
+      apt:
+        name: certbot
+        state: present
+
+    - name: Create ACME challenge webroot
+      file:
+        path: /var/www/certbot
+        state: directory
+        mode: '0755'
+
+    # Credentials come from the instance profile.
+    - name: Restore certificates from S3 if archived
+      shell: |
+        set -o pipefail
+        aws s3 sync "s3://{{ s3_bucket_name }}/letsencrypt/" /etc/letsencrypt/ --only-show-errors
+      args:
+        executable: /bin/bash
+      register: cert_restore
+      changed_when: cert_restore.stdout | length > 0
+      failed_when: false
+
+    - name: Check whether a usable certificate now exists
+      stat:
+        path: "/etc/letsencrypt/live/{{ server_domain }}/fullchain.pem"
+      register: cert_file
+
     - name: Write Nginx configuration file
       template:
         src: templates/nginx.conf.j2
@@ -122,6 +166,8 @@
         owner: ubuntu
         group: ubuntu
         mode: '0644'
+      vars:
+        tls_enabled: "{{ cert_file.stat.exists }}"
 
     - name: Write docker-compose.yml file
       template:
@@ -140,6 +186,90 @@
       command: docker compose up -d --remove-orphans
       args:
         chdir: /opt/mercala
+
+    # Runs after the containers are up, because the HTTP-01 challenge needs nginx already
+    # serving /.well-known/acme-challenge/ on port 80. That ordering is only possible
+    # because the template no longer requires a certificate in order to start.
+    - name: Obtain a certificate when none exists and an ACME email is configured
+      command: >
+        certbot certonly --webroot
+        --webroot-path /var/www/certbot
+        --domain {{ server_domain }}
+        --email {{ certbot_email }}
+        --agree-tos --non-interactive --keep-until-expiring
+      when:
+        - not cert_file.stat.exists
+        - certbot_email | length > 0
+      register: certbot_run
+      failed_when: false
+
+    - name: Warn when TLS cannot be configured
+      debug:
+        msg: >-
+          No certificate for {{ server_domain }} and no certbot_email configured, so the
+          API is being served over plain HTTP. Set the CERTBOT_EMAIL secret to enable
+          automatic issuance — registering an ACME account requires an email address.
+      when:
+        - not cert_file.stat.exists
+        - certbot_email | length == 0
+
+    - name: Re-check certificate after issuance
+      stat:
+        path: "/etc/letsencrypt/live/{{ server_domain }}/fullchain.pem"
+      register: cert_file_after
+
+    # Archived so the next spot instance restores rather than re-requests.
+    - name: Archive certificates to S3
+      shell: |
+        set -o pipefail
+        aws s3 sync /etc/letsencrypt/ "s3://{{ s3_bucket_name }}/letsencrypt/" --only-show-errors
+      args:
+        executable: /bin/bash
+      when: cert_file_after.stat.exists
+      changed_when: false
+
+    - name: Re-render Nginx with TLS enabled
+      template:
+        src: templates/nginx.conf.j2
+        dest: /opt/mercala/nginx.conf
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      vars:
+        tls_enabled: true
+      when:
+        - cert_file_after.stat.exists
+        - not cert_file.stat.exists
+      register: nginx_retemplated
+
+    - name: Restart Nginx to pick up the certificate
+      command: docker compose restart nginx
+      args:
+        chdir: /opt/mercala
+      when: nginx_retemplated is changed
+
+    # Renewal writes through the same webroot nginx already serves, then re-archives so
+    # the refreshed certificate survives the next reprovision.
+    # cron runs with a minimal PATH that omits /usr/local/bin, where the AWS CLI installs.
+    # Without this the renewal would appear scheduled but fail silently, and TLS would
+    # simply expire after 90 days with nothing surfacing the problem.
+    - name: Schedule certificate renewal
+      cron:
+        name: "Renew Let's Encrypt certificates"
+        minute: "0"
+        hour: "3"
+        job: >
+          /usr/bin/certbot renew --webroot --webroot-path /var/www/certbot --quiet
+          --deploy-hook '/usr/local/bin/aws s3 sync /etc/letsencrypt/ s3://{{ s3_bucket_name }}/letsencrypt/ --only-show-errors && cd /opt/mercala && /usr/bin/docker compose restart nginx'
+        env: no
+      when: cert_file_after.stat.exists
+
+    - name: Give cron an explicit PATH
+      cron:
+        name: PATH
+        env: yes
+        job: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      when: cert_file_after.stat.exists
 
     - name: Set up daily database backup cron job
       cron:
