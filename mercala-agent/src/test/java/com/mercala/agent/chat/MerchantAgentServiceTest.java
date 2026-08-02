@@ -32,7 +32,10 @@ class MerchantAgentServiceTest {
     @BeforeEach
     void setUp() {
         chatModel = mock(ChatModel.class);
-        service = new MerchantAgentService(chatModel, new AgentStreamer(chatModel, java.time.Duration.ofSeconds(30)));
+        service = new MerchantAgentService(
+                chatModel,
+                new AgentStreamer(chatModel, java.time.Duration.ofSeconds(30)),
+                new com.mercala.agent.agui.AgUiStreamer(chatModel, java.time.Duration.ofSeconds(30)));
     }
 
     @AfterEach

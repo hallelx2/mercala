@@ -53,6 +53,11 @@ public class SecurityConfig {
                         // purpose — nothing under /api/public may ever mutate.
                         .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/webhooks/**")).permitAll()                // public webhooks
+                        // Ahead of the blanket /api/media rule below, because first match
+                        // wins: an upload writes to the tenant's storage prefix and must
+                        // never be anonymous. The blanket rule is legacy and is being
+                        // narrowed under HAL-495; this endpoint does not wait for that.
+                        .requestMatchers(HttpMethod.POST, "/api/media/uploads").authenticated()
                         .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/media/**")).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e

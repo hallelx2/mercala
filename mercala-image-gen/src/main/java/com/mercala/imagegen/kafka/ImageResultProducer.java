@@ -32,10 +32,24 @@ public class ImageResultProducer {
      * @param imageUrl  The public URL of the uploaded image
      */
     public void publishImageResult(UUID productId, UUID tenantId, String imageUrl) {
-        ImageResultEvent event = new ImageResultEvent(productId, tenantId, imageUrl);
-        log.info("Publishing image result event: topic={}, productId={}, tenantId={}, imageUrl='{}'",
-                topic, productId, tenantId, imageUrl);
-        
+        publish(new ImageResultEvent(productId, tenantId, imageUrl));
+    }
+
+    /**
+     * Publishes the result of retouching a merchant's own photo, carrying the original
+     * with it so the far side can show one beside the other.
+     */
+    public void publishEnhancementResult(UUID productId, UUID tenantId, String imageUrl, String sourceImageUrl) {
+        publish(ImageResultEvent.enhanced(productId, tenantId, imageUrl, sourceImageUrl));
+    }
+
+    private void publish(ImageResultEvent event) {
+        UUID productId = event.productId();
+        UUID tenantId = event.tenantId();
+        log.info("Publishing image result event: topic={}, productId={}, tenantId={}, mode={}, imageUrl='{}'",
+                topic, productId, tenantId, event.mode(), event.imageUrl());
+
+
         org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
                 new org.apache.kafka.clients.producer.ProducerRecord<>(
                         topic,

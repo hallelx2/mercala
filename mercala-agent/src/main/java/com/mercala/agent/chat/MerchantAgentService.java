@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,8 +18,16 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
+
+import com.mercala.agent.agui.AgUiEvent;
+import com.mercala.agent.agui.AgUiStreamer;
+import com.mercala.agent.agui.AgentRunChannel;
+import com.mercala.agent.agui.ConversationBuilder;
+import com.mercala.agent.agui.FrontendToolCallback;
+import com.mercala.agent.agui.RunAgentInput;
 
 import reactor.core.publisher.Flux;
 
@@ -62,16 +72,54 @@ public class MerchantAgentService {
             Never include parentheses around the JSON arguments (e.g., never output <function=toolName(...)>).
             """;
 
+    /**
+     * Added to the persona on the AG-UI path only. The other endpoints answer into a plain
+     * text box, where telling the model to "ask with a control the merchant can click"
+     * would produce a question no client knows how to render.
+     */
+    private static final String AGENTIC_ADDENDUM = """
+
+            ## Working with the merchant's interface
+            This conversation is rendered by an interface that can show controls, not just text.
+
+            - **Ask instead of guessing.** When a required detail is missing or ambiguous —
+              sizes, colour, price, which of two products was meant — call `askUser` with the
+              question and the plausible answers. Never invent a value and never proceed on an
+              assumption you could have checked in one question.
+            - **Confirm before anything destructive or expensive.** Deletions, bulk price
+              changes, anything that goes live to shoppers: call `confirmAction` first and say
+              exactly what will happen.
+            - **Propose, don't impose.** For a draft product or a set of field changes, call
+              `proposeEdit` with the values you would have used. The merchant may correct them,
+              and their corrected values are what you then apply — not your original proposal.
+            - After calling any of these three, stop. The answer reaches you on the next turn.
+            - Some tools run in the merchant's browser. Calling one dispatches it and returns
+              immediately; its result also arrives on the next turn. Do not call it twice and do
+              not invent what it returned.
+            - The interface already shows every tool you call, its arguments and its result. Do
+              not narrate mechanics — no "calling createProduct now". Say what it means for the
+              store.
+            """;
+
     private static final Set<String> MERCHANT_TOOLS = Set.of(
-            "createProduct", "getProduct", "searchCatalog", "updateInventory", "requestProductImage"
+            "createProduct", "getProduct", "searchCatalog", "updateInventory",
+            "requestProductImage", "enhanceProductImage"
     );
+
+    /** The merchant tools plus the three that hand the turn back to a human. */
+    private static final Set<String> AGENTIC_TOOLS = Stream.concat(
+            MERCHANT_TOOLS.stream(),
+            Stream.of("askUser", "confirmAction", "proposeEdit")
+    ).collect(Collectors.toUnmodifiableSet());
 
     private final ChatModel chatModel;
     private final AgentStreamer agentStreamer;
+    private final AgUiStreamer agUiStreamer;
 
-    public MerchantAgentService(ChatModel chatModel, AgentStreamer agentStreamer) {
+    public MerchantAgentService(ChatModel chatModel, AgentStreamer agentStreamer, AgUiStreamer agUiStreamer) {
         this.chatModel = chatModel;
         this.agentStreamer = agentStreamer;
+        this.agUiStreamer = agUiStreamer;
     }
 
     /**
@@ -154,13 +202,96 @@ public class MerchantAgentService {
     }
 
     /**
+     * The AG-UI path: one run of the agent, narrated as protocol events.
+     *
+     * <p>Three things differ from {@link #chatStream}, and each of them is what makes the
+     * turn agentic rather than a monologue. The conversation is rebuilt from the client's
+     * thread, so the agent can follow up and can act on an answer it asked for. The
+     * human-in-the-loop tools are offered, so it can ask at all. And tools the client
+     * declared are registered for this run only, so what the agent can do depends on where
+     * the merchant is standing in the interface.
+     */
+    public Flux<AgUiEvent> agui(RunAgentInput input) {
+        Resolved resolved = resolveIdentity(null, null);
+
+        log.info("AG-UI run — tenant={}, user={}, thread={}, messages={}, clientTools={}",
+                resolved.tenantId(), resolved.userId(), input.threadId(),
+                input.messages() == null ? 0 : input.messages().size(), input.tools().size());
+
+        AgentRunChannel channel = AgentRunChannel.active(input.runId());
+
+        List<Message> messages = ConversationBuilder.build(
+                SYSTEM_PROMPT + AGENTIC_ADDENDUM + renderContext(input.context()), input.messages());
+
+        List<FunctionCallback> clientTools = input.tools().stream()
+                .filter(tool -> tool != null && tool.name() != null && !tool.name().isBlank())
+                // A client-declared tool may not take the name of a server one. Allowing it
+                // would let a page shadow `createProduct` — the model would call what it
+                // believed was the catalogue, and the browser would answer. That is a
+                // capability the client is not supposed to have, whether it reached for it
+                // deliberately or was talked into it.
+                .filter(tool -> {
+                    if (AGENTIC_TOOLS.contains(tool.name())) {
+                        log.warn("Ignoring client-declared tool '{}': it shadows a server tool", tool.name());
+                        return false;
+                    }
+                    return true;
+                })
+                .map(tool -> (FunctionCallback) new FrontendToolCallback(tool, channel))
+                .toList();
+
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .withFunctions(AGENTIC_TOOLS)
+                .withFunctionCallbacks(clientTools)
+                .build();
+
+        return agUiStreamer.stream(
+                new Prompt(messages, options),
+                new AgentContext(resolved.tenantId(), resolved.userId(), "MERCHANT_OWNER"),
+                channel,
+                input.threadId(),
+                input.runId());
+    }
+
+    /**
+     * Client context — what page the merchant is on, what they have selected — appended to
+     * the system prompt rather than sent as a message, so it reads as ambient truth rather
+     * than as something the merchant said and might be contradicting later.
+     */
+    private static String renderContext(List<RunAgentInput.ContextItem> context) {
+        if (context == null || context.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("\n## What the merchant is currently looking at\n");
+        for (RunAgentInput.ContextItem item : context) {
+            if (item == null || item.value() == null) {
+                continue;
+            }
+            sb.append("- ")
+                    .append(item.description() == null ? "context" : item.description())
+                    .append(": ")
+                    .append(item.value())
+                    .append('\n');
+        }
+        return sb.toString();
+    }
+
+    /**
      * Tenant/user reconciliation, used by both the blocking and streaming paths.
      * Security-relevant: it rejects a request whose body claims a different tenant or
      * user than the authenticated session, so it must have exactly one implementation.
      */
     private Resolved resolveIdentity(ChatRequest request) {
-        UUID tenantId = request.tenantId();
-        UUID userId = request.userId();
+        return resolveIdentity(request.tenantId(), request.userId());
+    }
+
+    /**
+     * @param claimedTenantId tenant the caller asserts, or null to take the session's
+     * @param claimedUserId   user the caller asserts, or null to take the session's
+     */
+    private Resolved resolveIdentity(UUID claimedTenantId, UUID claimedUserId) {
+        UUID tenantId = claimedTenantId;
+        UUID userId = claimedUserId;
         try {
             AgentContext ctx = AgentContext.current();
             if (tenantId != null && !tenantId.equals(ctx.tenantId())) {

@@ -128,6 +128,26 @@ One-line: the model layer is swappable and costs nothing to run by default.
       generated through the Java provider (~230–260 KB, ~3s). Confirmed flux-1-schnell
       returns **JPEG**, not PNG, which is precisely why format sniffing exists.
       Opt-in `CloudflareImageProviderLiveTest` re-runs this whenever creds are present.
+- [x] **AG-UI on the merchant agent** *(HAL-557)* — `POST /api/agent/merchant/agui` speaks the
+      protocol: run lifecycle, streamed text, the full tool-call lifecycle *with results*,
+      state snapshot plus JSON-Patch deltas, and `CUSTOM` frames for Mercala's own payloads.
+      Tool events are emitted from inside the tool, not scraped from model chunks, so a
+      failure is reported as one. The client owns the thread and sends it whole each run,
+      which is what makes follow-ups and human-in-the-loop possible at all. `askUser`,
+      `confirmAction` and `proposeEdit` ship server-side; tools the browser declares are
+      registered per run and dispatched back to it. The old `/chat/stream` is untouched.
+- [x] **Image enhancement** *(HAL-558)* — the merchant's own photograph in, a retouched one
+      out. `ImageRequestEvent` grew a mode (additive, so replays of older events still read);
+      `POST /api/media/uploads` stores originals under the tenant prefix, identified by magic
+      bytes rather than by filename; Cloudflare (SDXL img2img), Replicate and OpenAI
+      (`images/edits`) implement `enhanceImage`, and the router filters the chain by
+      capability so "does not offer this" never opens a circuit breaker. Source URLs are
+      fetched only from Mercala storage — an SSRF guard, because that URL originates in a
+      chat message.
+- [x] `GET /api/products/{id}/images` — imagery was write-only until now, so a merchant had
+      no way to see what was generated or enhanced. Explicitly tenant-scoped in the query:
+      the Hibernate filter only applies inside a transaction, which a controller read has
+      not got.
 - [ ] (opt) Add Replicate credit — account authenticates but returns **402 Insufficient
       credit**. Not urgent now that Cloudflare leads the chain.
 - [ ] Decide: migrate embeddings off 1536-dim zero-padding to native ONNX size *(HAL-360)*
@@ -163,6 +183,18 @@ cannot drift, the ergonomics stay ours.
 - [~] Chat-first merchant dashboard — add/manage products by chat, live imagery preview *(HAL-172)*
       — overview, chat, products, orders and settings pages shipped; streaming tool calls fixed
       (HAL-515, PR #64); imagery preview still open
+- [x] **Agentic chat surface** *(HAL-559, HAL-560)* — AG-UI client in `@mercala/sdk` (typed
+      events, SSE parser, run reducer, JSON Patch) plus a transcript that shows the work:
+      tool cards with streamed arguments, results, durations and failures; a live activity
+      rail fed by the agent's own state; and an event inspector for the raw log. Generative
+      UI maps tools to controls — product cards, question cards, approve/reject, and an
+      editable proposal whose corrections are what actually get applied.
+- [x] **The composer** *(HAL-561)* — multiline with Enter/Shift+Enter, attachments by
+      picker, drag or paste, a stop button that aborts the run, slash commands, and a field
+      that stays live while the agent works.
+- [x] **Image studio in chat** *(HAL-562)* — attach a photograph, watch it retouched, compare
+      before and after on a slider. The result arrives out-of-band through Kafka, so the card
+      polls the product's imagery rather than pretending the stream carries it.
 - [x] Store profile — `tenants.description`, enriched `/auth/me`, `PATCH /api/tenants/me`,
       captured at signup and editable in settings *(PR #64)*
 - [x] Identity-first signup *(HAL-552, PR #67)* — sign up as a person (name/email/password),

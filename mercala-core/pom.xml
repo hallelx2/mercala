@@ -136,6 +136,16 @@
             <artifactId>langchain4j-embeddings-all-minilm-l6-v2</artifactId>
             <version>0.36.0</version>
         </dependency>
+        <!--
+          Same client and version as mercala-image-gen. Core needs it because the merchant's
+          own photographs are uploaded here, where authentication and tenancy already live —
+          image-gen has neither and is not reachable from a browser.
+        -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.6.0</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -24,6 +24,25 @@ public class ReplicateProperties {
     private String apiToken = "";
     private String model = "black-forest-labs/flux-schnell";
 
+    /**
+     * The image-to-image model. Separate from {@link #model} for the same reason as on
+     * Cloudflare: {@code flux-schnell} takes no input image, so enhancement has to go to a
+     * model that does. {@code flux-kontext} edits from an instruction rather than a
+     * denoising strength, which is closer to what a merchant means by "clean this up".
+     */
+    private String enhanceModel = "black-forest-labs/flux-kontext-pro";
+
+    /**
+     * Which input field the enhancement model expects the source image on. Replicate has
+     * no convention here — {@code flux-kontext} calls it {@code input_image}, the SDXL
+     * img2img models call it {@code image} — and getting it wrong is a schema error, not a
+     * bad picture. Config rather than code, like every other Replicate input.
+     */
+    private String enhanceImageField = "input_image";
+
+    /** Extra inputs for the enhancement model, which does not share the generation model's schema. */
+    private Map<String, String> enhanceInput = new LinkedHashMap<>();
+
     /** How long Replicate should hold the connection open before returning unresolved. */
     private Duration wait = Duration.ofSeconds(60);
 
@@ -57,6 +76,30 @@ public class ReplicateProperties {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public String getEnhanceModel() {
+        return enhanceModel;
+    }
+
+    public void setEnhanceModel(String enhanceModel) {
+        this.enhanceModel = enhanceModel;
+    }
+
+    public String getEnhanceImageField() {
+        return enhanceImageField;
+    }
+
+    public void setEnhanceImageField(String enhanceImageField) {
+        this.enhanceImageField = enhanceImageField;
+    }
+
+    public Map<String, String> getEnhanceInput() {
+        return enhanceInput;
+    }
+
+    public void setEnhanceInput(Map<String, String> enhanceInput) {
+        this.enhanceInput = enhanceInput;
     }
 
     public Duration getWait() {

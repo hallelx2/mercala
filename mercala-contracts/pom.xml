@@ -13,4 +13,18 @@
     <artifactId>mercala-contracts</artifactId>
     <name>mercala-contracts</name>
     <description>Shared event + DTO records across Mercala services (the published interface package)</description>
+
+    <dependencies>
+        <!--
+          Annotations only, not databind. These records are what three services deserialise
+          each other's events into, so the compatibility rules — ignore fields you do not
+          know — belong on the record itself rather than on each consumer's mapper
+          configuration, where one service can quietly disagree with the others. The
+          annotations artifact carries no serialiser and no transitive weight.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+    </dependencies>
 </project>
