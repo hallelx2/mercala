@@ -43,6 +43,9 @@ public class SecurityConfig {
                         .requestMatchers("/docs", "/api/v1/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/tenants").permitAll()   // public store signup
+                        // The storefront: anonymous shoppers browsing a store. GET-only on
+                        // purpose — nothing under /api/public may ever mutate.
+                        .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/webhooks/**")).permitAll()                // public webhooks
                         .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/media/**")).permitAll()
                         .anyRequest().authenticated())

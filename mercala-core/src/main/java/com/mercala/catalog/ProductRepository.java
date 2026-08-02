@@ -14,6 +14,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     List<Product> findByTenantId(UUID tenantId);
 
+    Page<Product> findByTenantId(UUID tenantId, Pageable pageable);
+
+    Page<Product> findByTenantIdAndStatus(UUID tenantId, ProductStatus status, Pageable pageable);
+
     Optional<Product> findByTenantIdAndId(UUID tenantId, UUID id);
 
     @Query(value = """
