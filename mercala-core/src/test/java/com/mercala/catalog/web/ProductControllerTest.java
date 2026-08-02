@@ -113,11 +113,12 @@ class ProductControllerTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Java Book"));
 
-        // 4. Shopper List Products
+        // 4. Shopper List Products — a Page envelope, as the spec always claimed
         mockMvc.perform(get("/api/products")
                         .header("Authorization", shopperToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("Java Book"));
+                .andExpect(jsonPath("$.content[0].name").value("Java Book"))
+                .andExpect(jsonPath("$.totalElements").value(1));
 
         // 5. Update Product (Owner)
         String updateProductJson = """
