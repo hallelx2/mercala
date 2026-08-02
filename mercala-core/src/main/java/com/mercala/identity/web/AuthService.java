@@ -103,17 +103,16 @@ public class AuthService {
      */
     @Transactional
     public AuthResult switchStore(java.util.UUID userId, String slug) {
-        Tenant tenant = tenantRepository.findBySlug(slug)
-                .orElseThrow(() -> new com.mercala.identity.exception.ResourceNotFoundException(
-                        "Store not found: " + slug));
-        membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())
+        // One joined lookup on purpose: "no such store" and "not your store" run the
+        // same statement, so response timing can't tell them apart either.
+        var membership = membershipRepository.findByUserIdAndTenantSlug(userId, slug)
                 .orElseThrow(() -> new com.mercala.identity.exception.ResourceNotFoundException(
                         "Store not found: " + slug));
 
         AppUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new com.mercala.identity.exception.ResourceNotFoundException(
                         "User not found: " + userId));
-        user.setTenantId(tenant.getId());
+        user.setTenantId(membership.getTenantId());
         userRepository.save(user);
         return new AuthResult(jwtService.issue(user), jwtService.getExpirationSeconds());
     }
