@@ -25,7 +25,10 @@ public class MediaController {
      * Programmatically triggers a seek to beginning on the consumer group's partitions,
      * initiating a complete replay of image result events.
      */
-    @SecurityRequirements  // Public per SecurityConfig — see HAL-495 — this is probably wrong.
+    // Documented as public because SecurityConfig permits /api/media/** without
+    // authentication. Whether that rule should exist is tracked in HAL-495; until it
+    // changes, the document must describe the API as it actually behaves.
+    @SecurityRequirements
     @PostMapping("/replay")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void triggerReplay() {
