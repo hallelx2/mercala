@@ -165,6 +165,9 @@ cannot drift, the ergonomics stay ours.
       (HAL-515, PR #64); imagery preview still open
 - [x] Store profile — `tenants.description`, enriched `/auth/me`, `PATCH /api/tenants/me`,
       captured at signup and editable in settings *(PR #64)*
+- [x] Identity-first signup *(HAL-552, PR #67)* — sign up as a person (name/email/password),
+      name the store from a dashboard onboarding card; slugless login with password
+      disambiguation; `POST /api/tenants/me` reissues the tenant-bearing token
 
 **Milestone 3 — shopper surface** *(target 2026-09-26)*
 - [~] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)* —
