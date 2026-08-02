@@ -160,11 +160,18 @@ cannot drift, the ergonomics stay ours.
       /dashboard proving the pattern. **Live: https://mercala-web.vercel.app**
 
 **Milestone 2 — merchant surface** *(target 2026-09-12)*
-- [ ] Chat-first merchant dashboard — add/manage products by chat, live imagery preview *(HAL-172)*
+- [~] Chat-first merchant dashboard — add/manage products by chat, live imagery preview *(HAL-172)*
+      — overview, chat, products, orders and settings pages shipped; streaming tool calls fixed
+      (HAL-515, PR #64); imagery preview still open
+- [x] Store profile — `tenants.description`, enriched `/auth/me`, `PATCH /api/tenants/me`,
+      captured at signup and editable in settings *(PR #64)*
 
 **Milestone 3 — shopper surface** *(target 2026-09-26)*
-- [ ] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)*
-- [ ] Cart → checkout → payment UI, order confirmation and history *(HAL-174)*
+- [~] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)* —
+      public API (`/api/public/stores/{slug}` + products/search, ACTIVE-only) and `/s/[slug]`
+      browse + search + product pages shipped (PR #64); shopper chat still open
+- [ ] Cart → checkout → payment UI, order confirmation and history *(HAL-174)* — needs a
+      public buying path (guest or shopper accounts); storefront is browse-only until then
 
 ## Launch & GTM *(gated on Mercala Web — target 2026-10-15)*
 
