@@ -27,12 +27,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
+    /** A real hash of a value nobody can log in with — the unknown-email cost equalizer. */
+    private final String timingEqualizerHash;
+
     public AuthService(TenantRepository tenantRepository, AppUserRepository userRepository,
                        PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.timingEqualizerHash = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
     }
 
     @Transactional(readOnly = true)
@@ -66,7 +70,15 @@ public class AuthService {
      * exists to a caller who doesn't hold its password.
      */
     private AuthResult loginByEmail(LoginRequest request) {
-        List<AppUser> matches = userRepository.findByEmail(request.email()).stream()
+        List<AppUser> candidates = userRepository.findByEmail(request.email());
+        if (candidates.isEmpty()) {
+            // Burn the same BCrypt cost an existing email would — without this, the
+            // instant rejection is a timing oracle for which emails are registered.
+            passwordEncoder.matches(request.password(), timingEqualizerHash);
+            throw new InvalidCredentialsException("Invalid credentials");
+        }
+
+        List<AppUser> matches = candidates.stream()
                 .filter(user -> passwordEncoder.matches(request.password(), user.getPasswordHash()))
                 .toList();
 

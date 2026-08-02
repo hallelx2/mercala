@@ -47,13 +47,14 @@ public class RegistrationService {
 
     /**
      * The onboarding step: a storeless user names their store. One store per account —
-     * a second call conflicts rather than silently replacing the first.
+     * a second call conflicts rather than silently replacing the first. The claim is a
+     * conditional UPDATE, not read-then-write: two concurrent calls both pass any
+     * in-memory check, but only one can match {@code tenant_id is null}; the loser's
+     * transaction rolls back, taking its freshly inserted tenant with it.
      */
     public Tenant createStoreFor(java.util.UUID userId, com.mercala.identity.web.dto.CreateStoreRequest request) {
-        AppUser user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
-        if (user.getTenantId() != null) {
-            throw new ResourceConflictException("This account already has a store");
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("User not found: " + userId);
         }
         if (tenantRepository.existsBySlug(request.slug())) {
             throw new ResourceConflictException("Tenant slug already exists: " + request.slug());
@@ -63,8 +64,9 @@ public class RegistrationService {
         tenant.setDescription(request.description());
         tenant = tenantRepository.save(tenant);
 
-        user.setTenantId(tenant.getId());
-        userRepository.save(user);
+        if (userRepository.attachStoreIfNone(userId, tenant.getId()) == 0) {
+            throw new ResourceConflictException("This account already has a store");
+        }
         return tenant;
     }
 

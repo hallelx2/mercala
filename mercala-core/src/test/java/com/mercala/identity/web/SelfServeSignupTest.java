@@ -64,6 +64,39 @@ class SelfServeSignupTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.tenantId").doesNotExist())
                 .andExpect(jsonPath("$.tenantSlug").doesNotExist());
 
+        // Another store with stock exists; the storeless token must see NONE of it.
+        // This is the isolation property the cohort changes: no tenant claim means an
+        // empty world, never an unscoped one.
+        String otherSlug = unique("other-shop");
+        String otherEmail = unique("other") + "@example.test";
+        mockMvc.perform(post("/api/tenants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"slug": "%s", "name": "Other Shop", "ownerEmail": "%s", "ownerPassword": "other-password-1"}
+                                """.formatted(otherSlug, otherEmail)))
+                .andExpect(status().isCreated());
+        String otherLogin = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"tenantSlug": "%s", "email": "%s", "password": "other-password-1"}
+                                """.formatted(otherSlug, otherEmail)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String otherToken = "Bearer " + JsonPath.read(otherLogin, "$.accessToken");
+        mockMvc.perform(post("/api/products")
+                        .header("Authorization", otherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Someone Else's Stock", "description": "not yours", "price": 5.00}
+                                """))
+                .andExpect(status().isCreated());
+
+        // 403, not an empty page: the service layer requires a tenant context outright
+        // (ProductService's "Tenant context is required" guard), so a tenantless token
+        // cannot even ask the question, let alone see another store's answer.
+        mockMvc.perform(get("/api/products").header("Authorization", token))
+                .andExpect(status().isForbidden());
+
         // Create the store from inside the session; the response reissues the token.
         String slug = unique("adas-atelier");
         String storeBody = mockMvc.perform(post("/api/tenants/me")
