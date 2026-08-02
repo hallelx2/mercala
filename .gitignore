@@ -66,3 +66,6 @@ crash.log
 devops/*.pem
 devops/deploy-compose.yml
 devops/deploy.sh
+
+# Session worktrees are local machinery, never part of the repo
+.claude/worktrees/
