@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mercala.identity.Tenant;
+import com.mercala.identity.TenantRepository;
 import com.mercala.identity.web.dto.LoginRequest;
 import com.mercala.identity.web.dto.LoginResponse;
 import com.mercala.identity.web.dto.MeResponse;
@@ -20,9 +22,11 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final AuthService authService;
+    private final TenantRepository tenantRepository;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, TenantRepository tenantRepository) {
         this.authService = authService;
+        this.tenantRepository = tenantRepository;
     }
 
     /** Public: exchange tenant slug + email + password for a signed JWT. */
@@ -36,6 +40,14 @@ public class AuthController {
     /** Authenticated: returns the current principal extracted from the JWT. */
     @GetMapping("/me")
     public MeResponse me(@AuthenticationPrincipal AuthenticatedUser principal) {
-        return new MeResponse(principal.userId(), principal.tenantId(), principal.email(), principal.role());
+        Tenant tenant = tenantRepository.findById(principal.tenantId()).orElse(null);
+        return new MeResponse(
+                principal.userId(),
+                principal.tenantId(),
+                principal.email(),
+                principal.role(),
+                tenant != null ? tenant.getSlug() : null,
+                tenant != null ? tenant.getName() : null,
+                tenant != null ? tenant.getDescription() : null);
     }
 }

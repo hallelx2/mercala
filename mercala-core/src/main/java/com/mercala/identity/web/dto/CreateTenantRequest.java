@@ -8,5 +8,7 @@ public record CreateTenantRequest(
         @NotBlank @Size(max = 63) String slug,
         @NotBlank @Size(max = 255) String name,
         @NotBlank @Email @Size(max = 320) String ownerEmail,
-        @NotBlank @Size(min = 8, max = 100) String ownerPassword
+        @NotBlank @Size(min = 8, max = 100) String ownerPassword,
+        /** Optional: what the store sells — becomes the public storefront blurb. */
+        @Size(max = 2000) String description
 ) {}
