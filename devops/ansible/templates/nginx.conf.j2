@@ -42,8 +42,23 @@
             proxy_set_header X-Forwarded-Proto $scheme;
             limit_req zone=api_limit burst={{ burst_api }} nodelay;
 
-            # SSE: responses must reach the client as they are produced, and the stream
-            # outlives nginx's default 60s read timeout.
+            # SSE: responses must reach the client as they are produced, and a streamed
+            # turn outlives nginx's default 60s read timeout.
+            #
+            # proxy_read_timeout is an IDLE timeout — it resets on every frame read from
+            # upstream, so it only fires when the agent goes quiet. It is the outermost of
+            # three timeouts that must stay in this order:
+            #
+            #   mercala.agent.stream-timeout        120s   application, emits an ERROR frame
+            #   spring.mvc.async.request-timeout    150s   servlet container
+            #   proxy_read_timeout (here)           180s   nginx
+            #
+            # Innermost wins, so a stalled generation always terminates with a frame the UI
+            # can render rather than a connection dying somewhere in the middle. Raising the
+            # application timeout without raising these two inverts that and turns a clean
+            # timeout back into a truncated stream. AgentTimeoutConfigTest guards the first
+            # two; this one lives in a template and cannot be asserted from the Java suite,
+            # which is exactly why the ordering is written down here.
             proxy_buffering off;
             proxy_cache off;
             proxy_read_timeout 180s;
