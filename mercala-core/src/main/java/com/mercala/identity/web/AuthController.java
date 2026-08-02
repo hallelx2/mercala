@@ -1,5 +1,6 @@
 package com.mercala.identity.web;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +26,7 @@ public class AuthController {
     }
 
     /** Public: exchange tenant slug + email + password for a signed JWT. */
+    @SecurityRequirements  // Public: this is where a token comes from.
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         AuthService.AuthResult result = authService.login(request);

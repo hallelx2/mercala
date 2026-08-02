@@ -19,6 +19,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
 
+import reactor.core.publisher.Flux;
+
 /**
  * Orchestrates the merchant chat-to-action flow.
  * 
@@ -65,32 +67,20 @@ public class MerchantAgentService {
     );
 
     private final ChatModel chatModel;
+    private final AgentStreamer agentStreamer;
 
-    public MerchantAgentService(ChatModel chatModel) {
+    public MerchantAgentService(ChatModel chatModel, AgentStreamer agentStreamer) {
         this.chatModel = chatModel;
+        this.agentStreamer = agentStreamer;
     }
 
     /**
      * Process a merchant's chat message through the agent pipeline.
      */
     public com.mercala.agent.chat.ChatResponse chat(ChatRequest request) {
-        UUID tenantId = request.tenantId();
-        UUID userId = request.userId();
-
-        try {
-            AgentContext ctx = AgentContext.current();
-            if (tenantId != null && !tenantId.equals(ctx.tenantId())) {
-                throw new IllegalArgumentException("Tenant ID mismatch with authenticated session");
-            }
-            if (userId != null && !userId.equals(ctx.userId())) {
-                throw new IllegalArgumentException("User ID mismatch with authenticated session");
-            }
-            // Use context values if request fields were omitted
-            if (tenantId == null) tenantId = ctx.tenantId();
-            if (userId == null) userId = ctx.userId();
-        } catch (IllegalStateException ignored) {
-            // No pre-existing context (e.g. from unit tests), proceed with request parameters
-        }
+        Resolved resolved = resolveIdentity(request);
+        UUID tenantId = resolved.tenantId();
+        UUID userId = resolved.userId();
 
         log.info("Merchant agent chat — tenant={}, user={}, message='{}'",
                 tenantId, userId, truncate(request.message(), 80));
@@ -136,6 +126,58 @@ public class MerchantAgentService {
             AgentContext.clear();
         }
     }
+
+
+    /**
+     * Streaming variant of {@link #chat}. Same prompt, same tools, same tenant guard —
+     * the difference is that the reply arrives incrementally instead of after the whole
+     * turn completes.
+     *
+     * <p>Kept alongside the blocking method rather than replacing it: the SDK's simple path
+     * and any non-browser caller still want one response object.
+     */
+    public Flux<ChatStreamEvent> chatStream(ChatRequest request) {
+        Resolved resolved = resolveIdentity(request);
+
+        List<Message> messages = new ArrayList<>();
+        messages.add(new SystemMessage(SYSTEM_PROMPT));
+        messages.add(new UserMessage(request.message()));
+
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .withFunctions(MERCHANT_TOOLS)
+                .build();
+
+        return agentStreamer.stream(
+                new Prompt(messages, options),
+                new AgentContext(resolved.tenantId(), resolved.userId(), "MERCHANT_OWNER"),
+                request.conversationId());
+    }
+
+    /**
+     * Tenant/user reconciliation, used by both the blocking and streaming paths.
+     * Security-relevant: it rejects a request whose body claims a different tenant or
+     * user than the authenticated session, so it must have exactly one implementation.
+     */
+    private Resolved resolveIdentity(ChatRequest request) {
+        UUID tenantId = request.tenantId();
+        UUID userId = request.userId();
+        try {
+            AgentContext ctx = AgentContext.current();
+            if (tenantId != null && !tenantId.equals(ctx.tenantId())) {
+                throw new IllegalArgumentException("Tenant ID mismatch with authenticated session");
+            }
+            if (userId != null && !userId.equals(ctx.userId())) {
+                throw new IllegalArgumentException("User ID mismatch with authenticated session");
+            }
+            if (tenantId == null) tenantId = ctx.tenantId();
+            if (userId == null) userId = ctx.userId();
+        } catch (IllegalStateException ignored) {
+            // No ambient context (unit tests); fall back to the request values.
+        }
+        return new Resolved(tenantId, userId);
+    }
+
+    private record Resolved(UUID tenantId, UUID userId) {}
 
     private static String truncate(String s, int maxLen) {
         if (s == null) return "";

@@ -4,6 +4,17 @@ server:
 spring:
   application:
     name: mercala-agent
+  mvc:
+    async:
+      # MUST stay greater than mercala.agent.stream-timeout below.
+      #
+      # Tomcat's default async timeout is 30s. A streamed agent turn with tool calls
+      # routinely runs longer than that, so with the default the container aborts the
+      # response before the application timeout fires — the client gets a truncated SSE
+      # stream and none of the ERROR-frame handling ever runs. Leaving the application
+      # timeout to win means a slow turn ends with a frame the UI can render instead of a
+      # dead connection. Asserted by AgentTimeoutConfigTest.
+      request-timeout: ${SPRING_MVC_ASYNC_REQUEST_TIMEOUT:150s}
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:mock-key}
@@ -25,6 +36,11 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 mercala:
+  agent:
+    # Bounds the streamed model call. MUST stay below spring.mvc.async.request-timeout so
+    # the application terminates the turn with an ERROR frame rather than the container
+    # aborting the response underneath it.
+    stream-timeout: ${MERCALA_AGENT_STREAM_TIMEOUT:120s}
   kafka:
     product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
     image-requests-topic: ${MERCALA_KAFKA_IMAGE_REQUESTS_TOPIC:image.requests}

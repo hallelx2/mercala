@@ -1,5 +1,8 @@
 package com.mercala.agent.chat;
 
+import reactor.core.publisher.Flux;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.http.MediaType;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,5 +46,24 @@ public class ShopperChatController {
         ChatResponse response = agentService.chat(request);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Streaming variant. Same guardrails as the JSON endpoint — rate limit and prompt scan
+     * run before a single frame is emitted, so an abusive request is rejected with a proper
+     * status rather than a 200 whose body turns out to be an error frame.
+     */
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<ChatStreamEvent>> chatStream(@Valid @RequestBody ChatRequest request) {
+        log.info("POST /api/agent/shopper/chat/stream — tenant={}", request.tenantId());
+
+        guardrailService.checkRateLimit(request.userId());
+        guardrailService.scanPrompt(request.message());
+
+        return agentService.chatStream(request)
+                .map(event -> ServerSentEvent.<ChatStreamEvent>builder()
+                        .event(event.type().name().toLowerCase())
+                        .data(event)
+                        .build());
     }
 }
