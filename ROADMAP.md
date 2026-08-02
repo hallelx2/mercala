@@ -153,9 +153,10 @@ cannot drift, the ergonomics stay ours.
 - [ ] `GET /api/orders` *(HAL-477)* — checkout creates orders nothing can read back
 
 **Milestone 1 — web foundation** *(target 2026-08-29)*
-- [ ] Create `mercala-web` repo — Bun workspace *(HAL-478)*
+- [x] Create `mercala-web` repo — Bun workspace, CI green from a clean clone *(HAL-478)*
 - [ ] `@mercala/sdk` — generated types + hand-written client over core and agent *(HAL-479)*
-- [ ] Design-token system + Mercala brand *(HAL-170)*
+- [~] Design-token system + Mercala brand *(HAL-170)* — token layer, DESIGN.md,
+      Button/Badge and the landing page shipped; dashboard type register still open
 - [ ] Auth + tenant onboarding, httpOnly cookie session *(HAL-171)*
 
 **Milestone 2 — merchant surface** *(target 2026-09-12)*
