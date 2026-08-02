@@ -108,8 +108,6 @@ One-line: it runs on AWS, deploys itself, and holds no static credentials.
 - [ ] Verify the deploy host's SSH key *(HAL-460)* — `StrictHostKeyChecking=no` sends every
       secret to whatever answers on that IP
 - [ ] Narrow the deploy role's `ec2:*` grant *(HAL-438)*
-- [ ] Declare `securitySchemes` in the OpenAPI spec *(HAL-475)* — blocks SDK generation
-- [ ] `GET /api/orders` *(HAL-477)* — orders can be created but never read back
 - [ ] (opt) Restrict SSH ingress from `0.0.0.0/0` to a known admin CIDR
 - [ ] (opt) Remove empty `com.mercala.orders` / `com.mercala.payments` package stubs *(HAL-359)*
 
@@ -146,11 +144,12 @@ httpOnly cookie so server components can read it, `"use client"` only at interac
 SDK is generated **types** from the two OpenAPI specs plus a hand-written client — the contract
 cannot drift, the ergonomics stay ours.
 
-**Milestone 0 — API contract readiness** *(prerequisite, in the backend projects)*
-- [ ] `securitySchemes` in the spec *(HAL-475)* — without it a generated client has no auth
-- [ ] Agent chat streams over SSE *(HAL-476)* — building chat on request/response means
-      rewriting the message store later, not restyling it
-- [ ] `GET /api/orders` *(HAL-477)* — checkout creates orders nothing can read back
+**Milestone 0 — API contract readiness** *(shipped 2026-08-02, PR #59)*
+- [x] `securitySchemes` in the spec *(HAL-475)* — bearerAuth declared, public endpoints opted out
+- [x] Agent chat streams over SSE *(HAL-476)* — typed frames, tenant context safe across
+      the scheduler hop, three-layer timeout contract through nginx
+- [x] `GET /api/orders` + `/{id}` *(HAL-477)* — role-scoped visibility, 404-not-403 for
+      other shoppers' orders
 
 **Milestone 1 — web foundation** *(target 2026-08-29)*
 - [x] Create `mercala-web` repo — Bun workspace, CI green from a clean clone *(HAL-478)*
