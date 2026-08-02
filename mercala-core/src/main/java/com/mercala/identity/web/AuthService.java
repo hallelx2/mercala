@@ -24,6 +24,7 @@ public class AuthService {
 
     private final TenantRepository tenantRepository;
     private final AppUserRepository userRepository;
+    private final com.mercala.identity.StoreMembershipRepository membershipRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
@@ -31,9 +32,11 @@ public class AuthService {
     private final String timingEqualizerHash;
 
     public AuthService(TenantRepository tenantRepository, AppUserRepository userRepository,
+                       com.mercala.identity.StoreMembershipRepository membershipRepository,
                        PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
+        this.membershipRepository = membershipRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.timingEqualizerHash = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
@@ -90,6 +93,28 @@ public class AuthService {
                     "This email signs in to more than one store — include your store slug");
         }
         AppUser user = matches.get(0);
+        return new AuthResult(jwtService.issue(user), jwtService.getExpirationSeconds());
+    }
+
+    /**
+     * Switches the session's active store (HAL-556). Membership is the gate: naming a
+     * store you don't belong to is a 404 — indistinguishable from a store that doesn't
+     * exist, so the endpoint can't be used to probe which slugs are real.
+     */
+    @Transactional
+    public AuthResult switchStore(java.util.UUID userId, String slug) {
+        Tenant tenant = tenantRepository.findBySlug(slug)
+                .orElseThrow(() -> new com.mercala.identity.exception.ResourceNotFoundException(
+                        "Store not found: " + slug));
+        membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())
+                .orElseThrow(() -> new com.mercala.identity.exception.ResourceNotFoundException(
+                        "Store not found: " + slug));
+
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.mercala.identity.exception.ResourceNotFoundException(
+                        "User not found: " + userId));
+        user.setTenantId(tenant.getId());
+        userRepository.save(user);
         return new AuthResult(jwtService.issue(user), jwtService.getExpirationSeconds());
     }
 
