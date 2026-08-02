@@ -9,6 +9,9 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.ResponseEntity;
+
 import com.mercala.AbstractIntegrationTest;
 import com.mercala.identity.AppUser;
 import com.mercala.identity.AppUserRepository;
@@ -21,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -32,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PublicStoreControllerTest extends AbstractIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
+    @Autowired private TestRestTemplate rest;
     @Autowired private TenantRepository tenantRepository;
     @Autowired private AppUserRepository userRepository;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -78,11 +83,18 @@ class PublicStoreControllerTest extends AbstractIntegrationTest {
      * The bug this class exists for: a missing store must be a 404, not a 401. Without
      * {@code /error} in the permitAll list, Boot's error dispatch re-entered the filter
      * chain anonymously and the 404 left the building as "Authentication required".
+     *
+     * <p>Deliberately NOT MockMvc: MockMvc never performs the servlet container's ERROR
+     * dispatch to {@code /error}, so a MockMvc version of this test passes with or
+     * without the fix (review finding on PR #65). {@code TestRestTemplate} against the
+     * RANDOM_PORT container runs the real dispatch — removing {@code /error} from the
+     * permitAll list makes this fail with 401, which is exactly the regression it guards.
      */
     @Test
-    void missingStoreIsNotFoundNotUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/public/stores/no-such-store"))
-                .andExpect(status().isNotFound());
+    void missingStoreIsNotFoundNotUnauthorized() {
+        ResponseEntity<String> response =
+                rest.getForEntity("/api/public/stores/no-such-store", String.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
     }
 
     @Test
