@@ -57,7 +57,7 @@ public final class ConversationBuilder {
         }
 
         List<AgUiMessage> recent = thread.size() > MAX_MESSAGES
-                ? thread.subList(thread.size() - MAX_MESSAGES, thread.size())
+                ? dropOrphanedToolResults(thread.subList(thread.size() - MAX_MESSAGES, thread.size()))
                 : thread;
         if (recent.size() < thread.size()) {
             log.info("Trimmed conversation from {} to the most recent {} messages", thread.size(), recent.size());
@@ -70,6 +70,26 @@ public final class ConversationBuilder {
             }
         }
         return messages;
+    }
+
+    /**
+     * Drops {@code tool} messages left at the front of a trimmed window with nothing to
+     * answer.
+     *
+     * <p>A tool result is only meaningful directly after the assistant message that made
+     * the call. Trimming can cut between the two, and an OpenAI-compatible API rejects the
+     * remainder outright — the whole turn fails with a 400 rather than degrading. Since the
+     * window is the newest messages, the orphans are always at the start.
+     */
+    private static List<AgUiMessage> dropOrphanedToolResults(List<AgUiMessage> window) {
+        int start = 0;
+        while (start < window.size() && window.get(start).hasRole("tool")) {
+            start++;
+        }
+        if (start > 0) {
+            log.info("Dropped {} tool result(s) whose call was trimmed out of the window", start);
+        }
+        return window.subList(start, window.size());
     }
 
     private static Message convert(AgUiMessage message) {

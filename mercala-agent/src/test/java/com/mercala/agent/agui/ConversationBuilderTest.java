@@ -113,6 +113,30 @@ class ConversationBuilderTest {
                 .isEqualTo("message " + (thread.size() - 1));
     }
 
+    /**
+     * Trimming can cut between an assistant's tool call and the result answering it. An
+     * OpenAI-compatible API rejects a tool message with no preceding call outright, so a
+     * long conversation would start failing with a 400 the moment it crossed the window.
+     */
+    @Test
+    void trimmingNeverLeavesAToolResultWithNothingToAnswer() {
+        List<AgUiMessage> thread = new ArrayList<>();
+        for (int i = 0; i < ConversationBuilder.MAX_MESSAGES; i++) {
+            thread.add(AgUiMessage.user("message " + i));
+        }
+        // Pushed to the front of the window by one more message than fits.
+        thread.add(1, new AgUiMessage("t1", "tool", "navy", "askUser", "tc1", null));
+        thread.add(1, new AgUiMessage("a1", "assistant", null, null, null, List.of(
+                new AgUiMessage.ToolCallRef("tc1", "function",
+                        new AgUiMessage.ToolCallRef.FunctionRef("askUser", "{}")))));
+
+        List<Message> messages = ConversationBuilder.build(SYSTEM, thread);
+
+        assertThat(messages.get(1))
+                .as("a trimmed window must not begin with an unanswerable tool result")
+                .isNotInstanceOf(ToolResponseMessage.class);
+    }
+
     @Test
     void anEmptyThreadStillProducesAUsablePrompt() {
         assertThat(ConversationBuilder.build(SYSTEM, List.of())).hasSize(1);
