@@ -39,6 +39,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // The Boot error dispatch forwards failed requests to /error. Without
+                        // this, an anonymous request's 404 re-enters the filter chain, fails
+                        // auth there, and leaves as a 401 — a missing public store claimed
+                        // "Authentication required" instead of "not found".
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/docs", "/api/v1/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
