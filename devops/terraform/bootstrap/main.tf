@@ -160,18 +160,40 @@ data "aws_iam_policy_document" "deploy" {
   }
 
   # Terraform remote state + the media bucket.
+  #
+  # The Get* list is long because refreshing an aws_s3_bucket resource reads the bucket's
+  # entire configuration surface — ACL, CORS, logging, lifecycle, encryption and the rest
+  # — even when the config sets none of them. Granting only the few this project actually
+  # configures fails the refresh with AccessDenied on whichever it happens to read first,
+  # which is one broken deploy per missing action. These are all read-only and scoped to
+  # this project's bucket.
   statement {
     sid    = "StateAndMediaBuckets"
     effect = "Allow"
     actions = [
       "s3:CreateBucket",
       "s3:DeleteObject",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetAnalyticsConfiguration",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
       "s3:GetBucketLocation",
+      "s3:GetBucketLogging",
+      "s3:GetBucketNotification",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetBucketOwnershipControls",
       "s3:GetBucketPolicy",
       "s3:GetBucketPublicAccessBlock",
+      "s3:GetBucketRequestPayment",
       "s3:GetBucketTagging",
       "s3:GetBucketVersioning",
+      "s3:GetBucketWebsite",
+      "s3:GetEncryptionConfiguration",
+      "s3:GetInventoryConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetMetricsConfiguration",
       "s3:GetObject",
+      "s3:GetReplicationConfiguration",
       "s3:ListBucket",
       "s3:PutBucketPublicAccessBlock",
       "s3:PutBucketTagging",
@@ -185,6 +207,12 @@ data "aws_iam_policy_document" "deploy" {
 
   # Terraform creates and attaches the EC2 instance profile, so it needs to manage
   # that role and hand it to the instance.
+  #
+  # As with the S3 statement, the read actions are enumerated exhaustively rather than
+  # minimally. Terraform reads back every resource it writes to confirm the result and to
+  # refresh state, so a create that succeeds still fails on the follow-up Get if that one
+  # action is missing — costing a whole deploy per omission. All of these stay scoped to
+  # the mercala-* namespace.
   statement {
     sid    = "ManageInstanceRole"
     effect = "Allow"
@@ -193,8 +221,11 @@ data "aws_iam_policy_document" "deploy" {
       "iam:AttachRolePolicy",
       "iam:CreateInstanceProfile",
       "iam:CreatePolicy",
+      "iam:CreatePolicyVersion",
       "iam:CreateRole",
+      "iam:DeleteInstanceProfile",
       "iam:DeletePolicy",
+      "iam:DeletePolicyVersion",
       "iam:DeleteRole",
       "iam:DeleteRolePolicy",
       "iam:DetachRolePolicy",
@@ -202,15 +233,25 @@ data "aws_iam_policy_document" "deploy" {
       "iam:GetPolicy",
       "iam:GetPolicyVersion",
       "iam:GetRole",
+      "iam:GetRolePolicy",
       "iam:ListAttachedRolePolicies",
+      "iam:ListInstanceProfileTags",
       "iam:ListInstanceProfilesForRole",
+      "iam:ListPolicyTags",
       "iam:ListPolicyVersions",
       "iam:ListRolePolicies",
+      "iam:ListRoleTags",
       "iam:PutRolePolicy",
       "iam:RemoveRoleFromInstanceProfile",
       "iam:TagInstanceProfile",
       "iam:TagPolicy",
       "iam:TagRole",
+      "iam:UntagInstanceProfile",
+      "iam:UntagPolicy",
+      "iam:UntagRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:UpdateRole",
+      "iam:UpdateRoleDescription",
     ]
     resources = [
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-*",

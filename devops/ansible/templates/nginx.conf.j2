@@ -1,3 +1,50 @@
+{#
+  Rendered with tls_enabled, which the playbook sets by checking whether a certificate
+  actually exists on the host.
+
+  The 443 block is conditional on purpose. Previously it was unconditional, so a missing
+  certificate made nginx fail to start at all — taking the entire API down rather than
+  degrading. That also created a deadlock: obtaining a certificate over HTTP-01 requires
+  something to serve /.well-known/acme-challenge/ on port 80, and nothing could serve it
+  while nginx refused to boot.
+
+  With this, port 80 always comes up. Before a certificate exists it proxies the API
+  directly; afterwards it redirects to HTTPS.
+#}
+{# default(..., true) so an empty string also falls back — an unset CI variable arrives
+   empty rather than undefined, and a blank domain here renders an unloadable config. #}
+{% set domain = server_domain | default('mercalaapi.hallelx2.com', true) %}
+{% macro api_routes(burst_default, burst_api) %}
+        # Route to mercala-agent
+        location /api/v1/agent {
+            proxy_pass http://agent:8082/api/agent;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            limit_req zone=api_limit burst={{ burst_api }} nodelay;
+        }
+
+        # Route to mercala-image-gen
+        location /api/v1/images {
+            proxy_pass http://image-gen:8083;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            limit_req zone=api_limit burst={{ burst_api }} nodelay;
+        }
+
+        # Default route to mercala-core
+        location / {
+            proxy_pass http://core:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            limit_req zone=api_limit burst={{ burst_default }} nodelay;
+        }
+{% endmacro %}
 events {
     worker_connections 1024;
 }
@@ -11,27 +58,42 @@ http {
     # Rate limiting zone for simple security
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 
-    # Redirect HTTP to HTTPS
     server {
         listen 80;
-        server_name {{ server_domain | default('mercalaapi.hallelx2.com') }};
+        server_name {{ domain }};
 
+        # Must stay reachable on port 80 even once TLS is on, so renewals can be
+        # answered without taking the site down.
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
         }
 
+        location /health {
+            access_log off;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+{% if tls_enabled | default(false) %}
         location / {
             return 301 https://$host$request_uri;
         }
+{% else %}
+        # No certificate on this host yet. Serving the API over plain HTTP is worse than
+        # HTTPS but far better than serving nothing, and it lets the ACME challenge
+        # complete so the next render can switch to the redirect above.
+{{ api_routes(10, 5) }}
+{% endif %}
     }
 
+{% if tls_enabled | default(false) %}
     # HTTPS server
     server {
         listen 443 ssl;
-        server_name {{ server_domain | default('mercalaapi.hallelx2.com') }};
+        server_name {{ domain }};
 
-        ssl_certificate     /etc/letsencrypt/live/{{ server_domain | default('mercalaapi.hallelx2.com') }}/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/{{ server_domain | default('mercalaapi.hallelx2.com') }}/privkey.pem;
+        ssl_certificate     /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
         ssl_protocols       TLSv1.2 TLSv1.3;
         ssl_ciphers         HIGH:!aNULL:!MD5;
         ssl_prefer_server_ciphers on;
@@ -43,36 +105,9 @@ http {
             add_header Content-Type text/plain;
         }
 
-        # Route to mercala-agent
-        location /api/v1/agent {
-            proxy_pass http://agent:8082/api/agent;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            limit_req zone=api_limit burst=5 nodelay;
-        }
-
-        # Route to mercala-image-gen
-        location /api/v1/images {
-            proxy_pass http://image-gen:8083;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            limit_req zone=api_limit burst=5 nodelay;
-        }
-
-        # Default route to mercala-core
-        location / {
-            proxy_pass http://core:8080;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            limit_req zone=api_limit burst=10 nodelay;
-        }
+{{ api_routes(10, 5) }}
     }
+{% endif %}
 
     # Internal proxy for GLM OpenAI compatibility
     server {

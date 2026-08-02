@@ -160,6 +160,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+          SERVER_DOMAIN: ${{ vars.SERVER_DOMAIN }}
           OPENAI_IMAGE_MODEL: ${{ vars.OPENAI_IMAGE_MODEL }}
           IMAGE_GEN_PROVIDER: ${{ vars.IMAGE_GEN_PROVIDER }}
           CLOUDFLARE_IMAGE_MODEL: ${{ vars.CLOUDFLARE_IMAGE_MODEL }}
@@ -184,6 +186,8 @@ jobs:
             --arg cloudflare_image_model_env "$CLOUDFLARE_IMAGE_MODEL" \
             --arg replicate_api_token_env "$REPLICATE_API_TOKEN" \
             --arg replicate_model_env     "$REPLICATE_MODEL" \
+            --arg certbot_email_env       "$CERTBOT_EMAIL" \
+            --arg server_domain_env       "$SERVER_DOMAIN" \
             '$ARGS.named' > "$EXTRA_VARS_FILE"
 
           ansible-playbook -i "$TARGET_HOST," devops/ansible/playbook.yml \
