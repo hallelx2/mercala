@@ -26,7 +26,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         try {
             var authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.getPrincipal() instanceof AuthenticatedUser user) {
+            if (authentication != null
+                    && authentication.getPrincipal() instanceof AuthenticatedUser user
+                    && user.tenantId() != null) {
+                // A null tenant is a user who hasn't created their store yet (HAL-552);
+                // leaving the context empty keeps tenant-scoped queries returning nothing
+                // rather than poisoning the ThreadLocal with a null.
                 TenantContext.setCurrentTenant(user.tenantId());
             }
             filterChain.doFilter(request, response);

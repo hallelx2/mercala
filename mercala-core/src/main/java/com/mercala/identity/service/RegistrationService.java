@@ -30,6 +30,52 @@ public class RegistrationService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Self-serve signup (HAL-552): a person, no store. The store comes later via
+     * {@link #createStoreFor}. Email is unique across ALL accounts, not just tenantless
+     * ones — otherwise slugless login could never disambiguate this user later.
+     */
+    public AppUser register(com.mercala.identity.web.dto.RegisterRequest request) {
+        if (userRepository.existsByEmail(request.email())) {
+            throw new ResourceConflictException("An account already exists for " + request.email());
+        }
+        AppUser user = new AppUser(null, request.email(),
+                passwordEncoder.encode(request.password()), Role.MERCHANT_OWNER);
+        user.setName(request.name());
+        return userRepository.save(user);
+    }
+
+    /**
+     * The onboarding step: a storeless user names their store. One store per account —
+     * a second call conflicts rather than silently replacing the first. The claim is a
+     * conditional UPDATE, not read-then-write: two concurrent calls both pass any
+     * in-memory check, but only one can match {@code tenant_id is null}; the loser's
+     * transaction rolls back, taking its freshly inserted tenant with it.
+     */
+    public Tenant createStoreFor(java.util.UUID userId, com.mercala.identity.web.dto.CreateStoreRequest request) {
+        if (!userRepository.existsById(userId)) {
+            throw new ResourceNotFoundException("User not found: " + userId);
+        }
+        if (tenantRepository.existsBySlug(request.slug())) {
+            throw new ResourceConflictException("Tenant slug already exists: " + request.slug());
+        }
+
+        Tenant tenant = new Tenant(request.slug(), request.name());
+        tenant.setDescription(request.description());
+        tenant = tenantRepository.save(tenant);
+
+        if (userRepository.attachStoreIfNone(userId, tenant.getId()) == 0) {
+            throw new ResourceConflictException("This account already has a store");
+        }
+        return tenant;
+    }
+
+    @Transactional(readOnly = true)
+    public AppUser getUser(java.util.UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+    }
+
     public Tenant createTenant(CreateTenantRequest request) {
         if (tenantRepository.existsBySlug(request.slug())) {
             throw new ResourceConflictException("Tenant slug already exists: " + request.slug());

@@ -45,6 +45,17 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    /**
+     * 409, not 401: the caller's credentials are right — for more than one store. Telling
+     * them so is safe (they hold the password) and the message says what to add.
+     */
+    @ExceptionHandler(AuthService.AmbiguousAccountException.class)
+    public ProblemDetail handleAmbiguousAccount(AuthService.AmbiguousAccountException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Ambiguous account");
+        return problem;
+    }
+
     @ExceptionHandler(ResourceConflictException.class)
     public ProblemDetail handleConflict(ResourceConflictException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

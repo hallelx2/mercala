@@ -30,9 +30,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class RegistrationController {
 
     private final RegistrationService registrationService;
+    private final com.mercala.platform.security.JwtService jwtService;
 
-    public RegistrationController(RegistrationService registrationService) {
+    public RegistrationController(RegistrationService registrationService,
+                                  com.mercala.platform.security.JwtService jwtService) {
         this.registrationService = registrationService;
+        this.jwtService = jwtService;
     }
 
     @SecurityRequirements  // Public: store signup happens before any token exists.
@@ -41,6 +44,26 @@ public class RegistrationController {
     public TenantResponse createTenant(@Valid @RequestBody CreateTenantRequest request) {
         Tenant tenant = registrationService.createTenant(request);
         return new TenantResponse(tenant.getId(), tenant.getSlug(), tenant.getName(), tenant.getStatus().name(), tenant.getDescription());
+    }
+
+    /**
+     * The dashboard onboarding step (HAL-552): a signed-in, storeless user creates
+     * their store. The response carries a fresh token because the caller's current
+     * JWT has no tenant claim — without the reissue, their session would keep seeing
+     * an empty world until they logged in again.
+     */
+    @PostMapping("/me")
+    @ResponseStatus(HttpStatus.CREATED)
+    public com.mercala.identity.web.dto.StoreCreatedResponse createMyStore(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal
+            com.mercala.platform.security.AuthenticatedUser principal,
+            @Valid @RequestBody com.mercala.identity.web.dto.CreateStoreRequest request) {
+        Tenant tenant = registrationService.createStoreFor(principal.userId(), request);
+        com.mercala.identity.AppUser owner = registrationService.getUser(principal.userId());
+        return new com.mercala.identity.web.dto.StoreCreatedResponse(
+                tenant.getId(), tenant.getSlug(), tenant.getName(), tenant.getStatus().name(),
+                tenant.getDescription(),
+                jwtService.issue(owner), "Bearer", jwtService.getExpirationSeconds());
     }
 
     /**
