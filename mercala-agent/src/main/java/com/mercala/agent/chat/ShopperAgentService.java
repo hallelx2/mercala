@@ -18,6 +18,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
 
+import reactor.core.publisher.Flux;
+
 /**
  * Conversational shopper discovery agent.
  *
@@ -83,23 +85,9 @@ public class ShopperAgentService {
      * Process a shopper's discovery query through the agent pipeline.
      */
     public com.mercala.agent.chat.ChatResponse chat(ChatRequest request) {
-        UUID tenantId = request.tenantId();
-        UUID userId = request.userId();
-
-        try {
-            AgentContext ctx = AgentContext.current();
-            if (tenantId != null && !tenantId.equals(ctx.tenantId())) {
-                throw new IllegalArgumentException("Tenant ID mismatch with authenticated session");
-            }
-            if (userId != null && !userId.equals(ctx.userId())) {
-                throw new IllegalArgumentException("User ID mismatch with authenticated session");
-            }
-            // Use context values if request fields were omitted
-            if (tenantId == null) tenantId = ctx.tenantId();
-            if (userId == null) userId = ctx.userId();
-        } catch (IllegalStateException ignored) {
-            // No pre-existing context (e.g. from unit tests), proceed with request parameters
-        }
+        Resolved resolved = resolveIdentity(request);
+        UUID tenantId = resolved.tenantId();
+        UUID userId = resolved.userId();
 
         log.info("Shopper agent chat — tenant={}, user={}, message='{}'",
                 tenantId, userId, truncate(request.message(), 80));
@@ -155,10 +143,10 @@ public class ShopperAgentService {
      * <p>Kept alongside the blocking method rather than replacing it: the SDK's simple path
      * and any non-browser caller still want one response object.
      */
-    public reactor.core.publisher.Flux<ChatStreamEvent> chatStream(ChatRequest request) {
+    public Flux<ChatStreamEvent> chatStream(ChatRequest request) {
         Resolved resolved = resolveIdentity(request);
 
-        java.util.List<Message> messages = new java.util.ArrayList<>();
+        List<Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(SYSTEM_PROMPT));
         messages.add(new UserMessage(request.message()));
 
@@ -172,7 +160,11 @@ public class ShopperAgentService {
                 request.conversationId());
     }
 
-    /** Tenant/user reconciliation shared by the blocking and streaming paths. */
+    /**
+     * Tenant/user reconciliation, used by both the blocking and streaming paths.
+     * Security-relevant: it rejects a request whose body claims a different tenant or
+     * user than the authenticated session, so it must have exactly one implementation.
+     */
     private Resolved resolveIdentity(ChatRequest request) {
         UUID tenantId = request.tenantId();
         UUID userId = request.userId();

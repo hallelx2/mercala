@@ -44,6 +44,16 @@ public class Order {
     @Column(name = "idempotency_key")
     private String idempotencyKey;
 
+    /**
+     * Mapped read-only: the column already exists with a database default (V9__orders.sql),
+     * so Postgres owns the value and Hibernate must not try to write it. Needed because an
+     * order list is read chronologically and the primary key is a random UUID — sorting by
+     * id looks ordered but is arbitrary.
+     */
+    @Column(name = "created_at", insertable = false, updatable = false)
+    private java.time.Instant createdAt;
+
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<OrderLine> lines = new ArrayList<>();
 
@@ -58,6 +68,10 @@ public class Order {
 
     public UUID getId() {
         return id;
+    }
+
+    public java.time.Instant getCreatedAt() {
+        return createdAt;
     }
 
     public UUID getTenantId() {

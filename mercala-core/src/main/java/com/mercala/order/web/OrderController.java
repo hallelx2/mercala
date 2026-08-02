@@ -57,7 +57,7 @@ public class OrderController {
     public Page<OrderResponse> list(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(required = false) OrderStatus status,
-            @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
         return orderQueryService
                 .findVisible(user.userId(), user.role(), status, pageable)

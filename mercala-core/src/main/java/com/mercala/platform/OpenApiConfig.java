@@ -42,8 +42,10 @@ public class OpenApiConfig {
                                 Agent-native, multi-tenant e-commerce platform — REST API.
 
                                 Authenticate with POST /api/auth/login to obtain a JWT, then send it as \
-                                `Authorization: Bearer <token>` on every other endpoint. Tenant scoping is \
-                                derived from the token, never from a request parameter."""))
+                                `Authorization: Bearer <token>` on protected endpoints. A handful are \
+                                public — tenant signup, the payment webhooks — and are marked as such \
+                                per-operation. For authenticated requests, tenant scoping is derived \
+                                from the token, never from a request parameter."""))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
