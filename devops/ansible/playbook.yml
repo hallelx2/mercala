@@ -159,6 +159,12 @@
         path: "/etc/letsencrypt/live/{{ server_domain }}/fullchain.pem"
       register: cert_file
 
+    # nginx.conf is bind-mounted, so changing it does not change the container definition
+    # and `docker compose up -d` leaves nginx running with the previous config already
+    # loaded. Every nginx change was therefore inert until something unrelated happened to
+    # restart the container — which is how a config fix could deploy "successfully" and
+    # have no effect. Registered here so the reload below is conditional on an actual
+    # change rather than restarting nginx on every run.
     - name: Write Nginx configuration file
       template:
         src: templates/nginx.conf.j2
@@ -168,6 +174,7 @@
         mode: '0644'
       vars:
         tls_enabled: "{{ cert_file.stat.exists }}"
+      register: nginx_config
 
     - name: Write docker-compose.yml file
       template:
@@ -186,6 +193,25 @@
       command: docker compose up -d --remove-orphans
       args:
         chdir: /opt/mercala
+
+    # Validate before applying. A syntax error here would otherwise take the whole site
+    # down with a crash-looping nginx and no obvious cause.
+    - name: Validate the rendered Nginx configuration
+      command: >
+        docker run --rm
+        -v /opt/mercala/nginx.conf:/etc/nginx/nginx.conf:ro
+        -v /etc/letsencrypt:/etc/letsencrypt:ro
+        nginx:alpine nginx -t
+      when: nginx_config is changed
+      changed_when: false
+
+    # Recreate rather than `nginx -s reload`: the container is bind-mounted read-only and
+    # recreation is the only thing compose treats as authoritative here.
+    - name: Reload Nginx when its configuration changed
+      command: docker compose up -d --force-recreate --no-deps nginx
+      args:
+        chdir: /opt/mercala
+      when: nginx_config is changed
 
     # Runs after the containers are up, because the HTTP-01 challenge needs nginx already
     # serving /.well-known/acme-challenge/ on port 80. That ordering is only possible
