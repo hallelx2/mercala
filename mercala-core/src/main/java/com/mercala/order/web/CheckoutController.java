@@ -72,7 +72,8 @@ public class CheckoutController {
                 order.getStatus(),
                 order.getTotalAmount(),
                 order.getIdempotencyKey(),
-                lines
+                lines,
+                order.getCreatedAt()
         );
     }
 }

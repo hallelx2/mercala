@@ -114,9 +114,25 @@ class CheckoutControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.lines[0].variantId").value(variant.getId().toString()))
                 .andExpect(jsonPath("$.lines[0].quantity").value(2))
                 .andExpect(jsonPath("$.lines[0].unitPrice").value(99.99))
+                // The client that just placed this should not have to re-fetch to learn
+                // when it happened (HAL-575).
+                .andExpect(jsonPath("$.createdAt").exists())
                 .andReturn().getResponse().getContentAsString();
 
         UUID orderId = UUID.fromString(com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.id"));
+
+        // Reading it back carries the same timestamp: everything time-shaped on the
+        // client — the dashboard's chart, "your last order was three weeks ago" — is
+        // built on this field being present on the list and detail responses too.
+        mockMvc.perform(get("/api/orders/" + orderId)
+                        .header("Authorization", shopperToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdAt").exists());
+
+        mockMvc.perform(get("/api/orders")
+                        .header("Authorization", shopperToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].createdAt").exists());
 
         // 4. Cart should now be empty after successful checkout
         mockMvc.perform(get("/api/cart")
