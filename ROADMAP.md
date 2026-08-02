@@ -168,6 +168,9 @@ cannot drift, the ergonomics stay ours.
 - [x] Identity-first signup *(HAL-552, PR #67)* — sign up as a person (name/email/password),
       name the store from a dashboard onboarding card; slugless login with password
       disambiguation; `POST /api/tenants/me` reissues the tenant-bearing token
+- [x] Many stores, one account *(HAL-556, PR #69)* — store memberships, membership-gated
+      `POST /api/auth/switch-store`, `/me.stores[]`; sidebar switcher, Stores page and
+      new-store flow landing in the chat to add products
 
 **Milestone 3 — shopper surface** *(target 2026-09-26)*
 - [~] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)* —
