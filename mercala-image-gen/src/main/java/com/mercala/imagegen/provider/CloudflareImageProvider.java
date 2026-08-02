@@ -2,6 +2,7 @@ package com.mercala.imagegen.provider;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,12 +84,41 @@ public class CloudflareImageProvider implements ImageProvider {
         String model = properties.getModel();
         log.info("Requesting image from Cloudflare Workers AI model={} for prompt: '{}'", model, prompt);
 
+        return run(model, buildBody(prompt));
+    }
+
+    /**
+     * Workers AI hosts an image-to-image model on the same free allowance as generation,
+     * which is what makes retouching a merchant's own photo cost nothing by default.
+     */
+    @Override
+    public boolean supportsEnhancement() {
+        return hasText(properties.getEnhanceModel());
+    }
+
+    @Override
+    public byte[] enhanceImage(byte[] sourceImage, String instruction, double strength) {
+        if (!isAvailable()) {
+            throw new ImageGenerationException("Cloudflare account id or API token is not configured");
+        }
+        if (sourceImage == null || sourceImage.length == 0) {
+            throw new ImageGenerationException("Cannot enhance an empty source image");
+        }
+
+        String model = properties.getEnhanceModel();
+        log.info("Enhancing a {} byte image with Cloudflare Workers AI model={} at strength {}: '{}'",
+                sourceImage.length, model, strength, instruction);
+
+        return run(model, buildEnhanceBody(sourceImage, instruction, strength));
+    }
+
+    private byte[] run(String model, String body) {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/accounts/" + properties.getAccountId() + "/ai/run/" + model))
                 .timeout(properties.getTimeout())
                 .header("Authorization", "Bearer " + properties.getApiToken())
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(buildBody(prompt), StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();
 
         HttpResponse<byte[]> response;
@@ -106,7 +136,7 @@ public class CloudflareImageProvider implements ImageProvider {
                     + ": " + describeError(response.body()));
         }
 
-        return extractImage(response);
+        return extractImage(response, model);
     }
 
     private String buildBody(String prompt) {
@@ -114,6 +144,28 @@ public class CloudflareImageProvider implements ImageProvider {
         body.put("prompt", truncatePrompt(prompt));
 
         for (Map.Entry<String, String> entry : properties.getInput().entrySet()) {
+            putTyped(body, entry.getKey(), entry.getValue());
+        }
+        return body.toString();
+    }
+
+    /**
+     * The img2img schema takes the source as {@code image}: an array of byte values, not
+     * base64 and not multipart. It is a verbose encoding for a photograph, but it is the
+     * one the model accepts, and sending base64 to it fails with a schema error rather
+     * than a useful message.
+     */
+    private String buildEnhanceBody(byte[] sourceImage, String instruction, double strength) {
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("prompt", truncatePrompt(instruction));
+        body.put("strength", strength);
+
+        ArrayNode image = body.putArray("image");
+        for (byte b : sourceImage) {
+            image.add(b & 0xFF);
+        }
+
+        for (Map.Entry<String, String> entry : properties.getEnhanceInput().entrySet()) {
             putTyped(body, entry.getKey(), entry.getValue());
         }
         return body.toString();
@@ -158,7 +210,7 @@ public class CloudflareImageProvider implements ImageProvider {
         node.put(key, trimmed);
     }
 
-    private byte[] extractImage(HttpResponse<byte[]> response) {
+    private byte[] extractImage(HttpResponse<byte[]> response, String model) {
         String contentType = response.headers().firstValue("content-type").orElse("").toLowerCase();
 
         // SDXL and friends stream the image straight back.
@@ -167,7 +219,7 @@ public class CloudflareImageProvider implements ImageProvider {
             if (bytes == null || bytes.length == 0) {
                 throw new ImageGenerationException("Cloudflare returned an empty image body");
             }
-            log.info("Cloudflare returned {} raw bytes from model {}", bytes.length, properties.getModel());
+            log.info("Cloudflare returned {} raw bytes from model {}", bytes.length, model);
             return bytes;
         }
 
@@ -188,7 +240,7 @@ public class CloudflareImageProvider implements ImageProvider {
             if (bytes.length == 0) {
                 throw new ImageGenerationException("Cloudflare returned an empty image after base64 decoding");
             }
-            log.info("Cloudflare returned {} bytes from model {}", bytes.length, properties.getModel());
+            log.info("Cloudflare returned {} bytes from model {}", bytes.length, model);
             return bytes;
         } catch (IllegalArgumentException e) {
             throw new ImageGenerationException("Cloudflare result.image was not valid base64", e);

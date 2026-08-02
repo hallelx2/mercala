@@ -27,6 +27,18 @@ public class CloudflareProperties {
     private String accountId = "";
     private String apiToken = "";
     private String model = "@cf/black-forest-labs/flux-1-schnell";
+
+    /**
+     * The image-to-image model. Deliberately a different setting from {@link #model}:
+     * {@code flux-1-schnell} is the best text-to-image model on the free allowance but
+     * accepts no input image at all, so enhancement has to route to an SDXL-family model
+     * whether or not generation does.
+     */
+    private String enhanceModel = "@cf/runwayml/stable-diffusion-v1-5-img2img";
+
+    /** Extra inputs for the enhancement model, which does not share the generation model's schema. */
+    private Map<String, String> enhanceInput = new LinkedHashMap<>();
+
     private Duration timeout = Duration.ofSeconds(60);
 
     /**
@@ -68,6 +80,22 @@ public class CloudflareProperties {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public String getEnhanceModel() {
+        return enhanceModel;
+    }
+
+    public void setEnhanceModel(String enhanceModel) {
+        this.enhanceModel = enhanceModel;
+    }
+
+    public Map<String, String> getEnhanceInput() {
+        return enhanceInput;
+    }
+
+    public void setEnhanceInput(Map<String, String> enhanceInput) {
+        this.enhanceInput = enhanceInput;
     }
 
     public Duration getTimeout() {

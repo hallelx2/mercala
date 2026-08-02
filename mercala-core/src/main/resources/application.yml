@@ -35,6 +35,14 @@ spring:
     username: ${SPRING_FLYWAY_USERNAME:mercala}
     password: ${SPRING_FLYWAY_PASSWORD:mercala}
 
+  # Merchant image uploads. Slightly above mercala.media.upload.max-bytes so an oversized
+  # file is refused by the endpoint, with a message naming the limit, rather than by the
+  # container with a bare 500.
+  servlet:
+    multipart:
+      max-file-size: 12MB
+      max-request-size: 12MB
+
 server:
   port: 8080
 
@@ -48,6 +56,22 @@ mercala:
     product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
     image-requests-topic: ${MERCALA_KAFKA_IMAGE_REQUESTS_TOPIC:image.requests}
     image-results-topic: ${MERCALA_KAFKA_IMAGE_RESULTS_TOPIC:image.results}
+  # Object storage for merchant uploads. The same endpoint and bucket mercala-image-gen
+  # writes generated images to: an enhancement reads the merchant's original from here and
+  # writes its result beside it. Blank credentials in the deployed stack, where the host's
+  # IAM instance profile supplies them.
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    session-token: ${MINIO_SESSION_TOKEN:}
+    region: ${AWS_REGION:}
+    bucket: ${MINIO_BUCKET:mercala-images}
+  media:
+    upload:
+      # A phone photograph is 2–5 MB; 10 leaves room for a DSLR export without letting the
+      # endpoint become a file host.
+      max-bytes: ${MERCALA_MEDIA_MAX_BYTES:10485760}
 
 # Actuator: expose only health on the web port (no metadata leakage without auth).
 management:

@@ -163,11 +163,16 @@ public class MinioStorageService implements StorageService {
 
     @Override
     public String uploadImage(UUID tenantId, UUID productId, byte[] imageBytes) {
+        return uploadImage(tenantId, productId, imageBytes, null);
+    }
+
+    @Override
+    public String uploadImage(UUID tenantId, UUID productId, byte[] imageBytes, String variant) {
         // Providers disagree on output format, so derive it from the bytes instead of
         // assuming PNG. Storing a WebP as .png with an image/png content type produces a
         // file some browsers refuse to render.
         ImageFormat format = ImageFormat.detect(imageBytes);
-        String objectName = tenantId + "/" + productId + "." + format.extension();
+        String objectName = tenantId + "/" + productId + suffix(variant) + "." + format.extension();
 
         try {
             log.info("Uploading {} image to bucket={} object={}", format, bucket, objectName);
@@ -188,6 +193,19 @@ public class MinioStorageService implements StorageService {
             log.error("Failed to upload image to storage", e);
             throw new RuntimeException("Image upload failure", e);
         }
+    }
+
+    /**
+     * A variant gets its own object name, ending in a short random segment so two
+     * enhancements of the same product do not overwrite each other. The merchant is
+     * choosing between them; overwriting would remove the choice.
+     */
+    private static String suffix(String variant) {
+        if (variant == null || variant.isBlank()) {
+            return "";
+        }
+        String safe = variant.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9-]", "");
+        return "-" + (safe.isEmpty() ? "variant" : safe) + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
     /**

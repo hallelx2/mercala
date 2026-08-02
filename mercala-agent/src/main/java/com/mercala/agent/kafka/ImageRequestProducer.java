@@ -35,9 +35,24 @@ public class ImageRequestProducer {
         UUID tenantId = AgentContext.current().tenantId();
         log.info("Publishing image request: productId={}, tenantId={}, prompt='{}'",
                 productId, tenantId, prompt);
+        publish(productId, tenantId, new ImageRequestEvent(productId, tenantId, prompt));
+    }
 
+    /**
+     * Asks for the merchant's own photograph to be retouched rather than for a new image to
+     * be invented. Same topic and same consumer — the mode on the event is what differs,
+     * which keeps ordering per product intact between the two kinds of request.
+     */
+    public void sendEnhancementRequest(UUID productId, String sourceImageUrl, String instruction, Double strength) {
+        UUID tenantId = AgentContext.current().tenantId();
+        log.info("Publishing image enhancement request: productId={}, tenantId={}, source='{}', instruction='{}'",
+                productId, tenantId, sourceImageUrl, instruction);
+        publish(productId, tenantId,
+                ImageRequestEvent.enhance(productId, tenantId, sourceImageUrl, instruction, strength));
+    }
+
+    private void publish(UUID productId, UUID tenantId, ImageRequestEvent event) {
         try {
-            ImageRequestEvent event = new ImageRequestEvent(productId, tenantId, prompt);
             org.apache.kafka.clients.producer.ProducerRecord<String, Object> record =
                     new org.apache.kafka.clients.producer.ProducerRecord<>(
                             imageRequestsTopic,

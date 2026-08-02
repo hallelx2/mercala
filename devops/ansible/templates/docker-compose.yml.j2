@@ -68,6 +68,17 @@ services:
       SPRING_FLYWAY_PASSWORD: {{ db_password }}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MERCALA_JWT_SECRET: {{ jwt_secret }}
+      # Merchant photo uploads land in the same bucket image-gen writes to: an
+      # enhancement reads the merchant's original from there and writes its result
+      # beside it. Blank credentials for the same reason as image-gen below —
+      # omitting them would fall back to application.yml's local "minioadmin"
+      # defaults and authenticate to real S3 as a user that does not exist.
+      MINIO_ENDPOINT: {{ s3_endpoint }}
+      MINIO_BUCKET: {{ s3_bucket_name }}
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      MINIO_SESSION_TOKEN: ""
+      AWS_REGION: {{ aws_region }}
       JAVA_OPTS: "-Xmx512m -Xms256m"
     depends_on:
       - db

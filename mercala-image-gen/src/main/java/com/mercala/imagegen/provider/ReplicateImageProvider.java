@@ -77,8 +77,51 @@ public class ReplicateImageProvider implements ImageProvider {
         }
 
         log.info("Requesting image from Replicate model={} for prompt: '{}'", properties.getModel(), prompt);
-        JsonNode prediction = createPrediction(prompt);
+        ObjectNode input = objectMapper.createObjectNode();
+        input.put("prompt", prompt == null ? "" : prompt);
+        applyConfigured(input, properties.getInput());
 
+        return await(createPrediction(properties.getModel(), input));
+    }
+
+    @Override
+    public boolean supportsEnhancement() {
+        return properties.getEnhanceModel() != null && !properties.getEnhanceModel().isBlank();
+    }
+
+    /**
+     * Replicate takes the source image as a URI, and the merchant's photo is in a bucket
+     * that shoppers cannot read (HAL-425) — so handing over a storage URL would give
+     * Replicate a 403 rather than a picture. A data URI carries the bytes in the request
+     * instead, which needs no public object and no presigned URL machinery.
+     */
+    @Override
+    public byte[] enhanceImage(byte[] sourceImage, String instruction, double strength) {
+        if (!isAvailable()) {
+            throw new ImageGenerationException("Replicate API token is not configured");
+        }
+        if (sourceImage == null || sourceImage.length == 0) {
+            throw new ImageGenerationException("Cannot enhance an empty source image");
+        }
+
+        String model = properties.getEnhanceModel();
+        log.info("Enhancing a {} byte image with Replicate model={} at strength {}: '{}'",
+                sourceImage.length, model, strength, instruction);
+
+        ObjectNode input = objectMapper.createObjectNode();
+        input.put("prompt", instruction == null ? "" : instruction);
+        input.put(properties.getEnhanceImageField(), dataUri(sourceImage));
+        // Denoising-strength models read this; instruction-edit models ignore it. Sending
+        // it unconditionally is cheaper than teaching this class which family it is talking to.
+        input.put("prompt_strength", strength);
+        applyConfigured(input, properties.getEnhanceInput());
+
+        return await(createPrediction(model, input));
+    }
+
+    /** Create, poll if needed, and download — shared by both modes. */
+    private byte[] await(JsonNode created) {
+        JsonNode prediction = created;
         String status = prediction.path("status").asText("");
         if (!isTerminal(status)) {
             prediction = pollUntilTerminal(prediction.path("id").asText());
@@ -95,22 +138,28 @@ public class ReplicateImageProvider implements ImageProvider {
         return download(extractOutputUrl(prediction));
     }
 
-    private JsonNode createPrediction(String prompt) {
-        ObjectNode input = objectMapper.createObjectNode();
-        input.put("prompt", prompt == null ? "" : prompt);
+    private static String dataUri(byte[] image) {
+        return "data:" + com.mercala.imagegen.storage.ImageFormat.detect(image).contentType()
+                + ";base64," + java.util.Base64.getEncoder().encodeToString(image);
+    }
 
-        // Configured inputs are typed by value so numbers and booleans reach Replicate as
-        // JSON numbers and booleans rather than quoted strings, which some models reject.
-        for (Map.Entry<String, String> entry : properties.getInput().entrySet()) {
+    /**
+     * Configured inputs are typed by value so numbers and booleans reach Replicate as JSON
+     * numbers and booleans rather than quoted strings, which some models reject.
+     */
+    private static void applyConfigured(ObjectNode input, Map<String, String> configured) {
+        for (Map.Entry<String, String> entry : configured.entrySet()) {
             putTyped(input, entry.getKey(), entry.getValue());
         }
+    }
 
+    private JsonNode createPrediction(String model, ObjectNode input) {
         ObjectNode body = objectMapper.createObjectNode();
         body.set("input", input);
 
         long waitSeconds = properties.getWait().toSeconds();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/models/" + properties.getModel() + "/predictions"))
+                .uri(URI.create(baseUrl + "/models/" + model + "/predictions"))
                 .timeout(properties.getWait().plusSeconds(15))
                 .header("Authorization", "Bearer " + properties.getApiToken())
                 .header("Content-Type", "application/json")
