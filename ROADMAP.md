@@ -153,10 +153,11 @@ cannot drift, the ergonomics stay ours.
 
 **Milestone 1 — web foundation** *(target 2026-08-29)*
 - [x] Create `mercala-web` repo — Bun workspace, CI green from a clean clone *(HAL-478)*
-- [ ] `@mercala/sdk` — generated types + hand-written client over core and agent *(HAL-479)*
-- [~] Design-token system + Mercala brand *(HAL-170)* — token layer, DESIGN.md,
-      Button/Badge and the landing page shipped; dashboard type register still open
-- [ ] Auth + tenant onboarding, httpOnly cookie session *(HAL-171)*
+- [x] `@mercala/sdk` — generated types from both live specs + hand-written client *(HAL-479)*
+- [x] Design-token system + Mercala brand *(HAL-170)* — token layer, DESIGN.md, primitives,
+      landing + auth screens; dashboard's denser type register comes with HAL-172
+- [x] Auth + tenant onboarding *(HAL-171)* — server actions, httpOnly cookie, gated
+      /dashboard proving the pattern. **Live: https://mercala-web.vercel.app**
 
 **Milestone 2 — merchant surface** *(target 2026-09-12)*
 - [ ] Chat-first merchant dashboard — add/manage products by chat, live imagery preview *(HAL-172)*
