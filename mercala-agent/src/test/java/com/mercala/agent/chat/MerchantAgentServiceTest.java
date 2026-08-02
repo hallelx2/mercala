@@ -32,7 +32,7 @@ class MerchantAgentServiceTest {
     @BeforeEach
     void setUp() {
         chatModel = mock(ChatModel.class);
-        service = new MerchantAgentService(chatModel);
+        service = new MerchantAgentService(chatModel, new AgentStreamer(chatModel));
     }
 
     @AfterEach
