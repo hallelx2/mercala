@@ -32,6 +32,15 @@ public record AgentContext(
         return ctx;
     }
 
+    /**
+     * Non-throwing read for infrastructure that must observe absence rather than fail on
+     * it — the context-propagation {@link AgentContextAccessor} snapshots ThreadLocals on
+     * arbitrary threads where no context legitimately exists yet.
+     */
+    public static AgentContext currentOrNull() {
+        return CURRENT.get();
+    }
+
     public static void clear() {
         CURRENT.remove();
     }
