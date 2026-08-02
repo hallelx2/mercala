@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    # A documentation edit should not rebuild three images, run terraform apply and
+    # reprovision the host. Every path here is inert at runtime; anything that can change
+    # behaviour must stay outside this list.
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.editorconfig'
+      - '.gitattributes'
   workflow_dispatch:
 
 permissions:

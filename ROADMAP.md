@@ -94,13 +94,22 @@ One-line: it runs on AWS, deploys itself, and holds no static credentials.
 - [x] nginx reverse proxy + Let's Encrypt TLS
 - [x] Terraform remote S3 backend (state survives runner sessions)
 - [x] Unified Scalar API docs portal at `/api/v1/docs`
-- [x] **Keyless deploys** — GitHub OIDC → IAM role, no `AWS_ACCESS_KEY_ID` anywhere
-- [x] **Keyless runtime** — EC2 instance profile for ECR pull + S3, no keys in containers
+- [x] **Keyless deploys** — GitHub OIDC → `mercala-github-actions`, verified live 2026-08-02.
+      No AWS access keys anywhere; the old key secrets are deleted. The OIDC provider is
+      account-wide and shared with Voxtar, so this stack references it rather than owning it.
+- [x] **Keyless runtime** — `mercala-app-host` instance profile for ECR pull + S3
+- [x] **TLS survives reprovision** *(HAL-464)* — certs restored from and archived to S3, nginx
+      degrades to HTTP instead of refusing to start when none exist, renewal cron scheduled
 - [ ] Micrometer → Prometheus → Grafana *(HAL-165)*
 - [ ] OpenTelemetry distributed tracing across core ↔ agent ↔ image-gen *(HAL-166)*
 - [ ] Harden Compose + CI — image pinning, port binding, least-privilege permissions *(HAL-192)*
-- [ ] Decide how generated images are served publicly — bucket has Block Public Access, so
-      current object URLs 403 for shoppers. Presigned URLs vs CloudFront vs public prefix.
+- [ ] Serve generated images publicly *(HAL-425)* — bucket has Block Public Access, so object
+      URLs 403 for shoppers. CloudFront vs presigned URLs vs a public prefix. Blocks HAL-173.
+- [ ] Verify the deploy host's SSH key *(HAL-460)* — `StrictHostKeyChecking=no` sends every
+      secret to whatever answers on that IP
+- [ ] Narrow the deploy role's `ec2:*` grant *(HAL-438)*
+- [ ] Declare `securitySchemes` in the OpenAPI spec *(HAL-475)* — blocks SDK generation
+- [ ] `GET /api/orders` *(HAL-477)* — orders can be created but never read back
 - [ ] (opt) Restrict SSH ingress from `0.0.0.0/0` to a known admin CIDR
 - [ ] (opt) Remove empty `com.mercala.orders` / `com.mercala.payments` package stubs *(HAL-359)*
 
@@ -127,22 +136,34 @@ One-line: the model layer is swappable and costs nothing to run by default.
 - [?] Per-tenant provider/model selection, the way payments already does it
 - [?] AI product copy generation (descriptions, SEO) — the third agent surface
 
-## Mercala Web *(next up — nothing here is blocked)*
+## Mercala Web *(next up)*
 
-One-line: the frontend, chat-first on both sides. Every backend capability it needs is live.
+One-line: the frontend, chat-first on both sides.
 
-**Milestone 1 — web foundation** *(target 2026-08-15)*
-- [ ] Next.js App Router scaffold + Mercala design-token system *(HAL-170)*
-- [ ] Auth + tenant onboarding against the existing JWT backend *(HAL-171)*
+**Decided 2026-08-02.** Separate `hallelx2/mercala-web` repo, Bun workspace (`apps/web` +
+`packages/sdk`). Next.js App Router, server-first: `page.tsx` is a gate and loader, JWT in an
+httpOnly cookie so server components can read it, `"use client"` only at interactive leaves.
+SDK is generated **types** from the two OpenAPI specs plus a hand-written client — the contract
+cannot drift, the ergonomics stay ours.
 
-**Milestone 2 — merchant surface** *(target 2026-08-29)*
+**Milestone 0 — API contract readiness** *(prerequisite, in the backend projects)*
+- [ ] `securitySchemes` in the spec *(HAL-475)* — without it a generated client has no auth
+- [ ] Agent chat streams over SSE *(HAL-476)* — building chat on request/response means
+      rewriting the message store later, not restyling it
+- [ ] `GET /api/orders` *(HAL-477)* — checkout creates orders nothing can read back
+
+**Milestone 1 — web foundation** *(target 2026-08-29)*
+- [ ] Create `mercala-web` repo — Bun workspace *(HAL-478)*
+- [ ] `@mercala/sdk` — generated types + hand-written client over core and agent *(HAL-479)*
+- [ ] Design-token system + Mercala brand *(HAL-170)*
+- [ ] Auth + tenant onboarding, httpOnly cookie session *(HAL-171)*
+
+**Milestone 2 — merchant surface** *(target 2026-09-12)*
 - [ ] Chat-first merchant dashboard — add/manage products by chat, live imagery preview *(HAL-172)*
 
-**Milestone 3 — shopper surface** *(target 2026-09-12)*
+**Milestone 3 — shopper surface** *(target 2026-09-26)*
 - [ ] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)*
-- [ ] Cart → checkout → payment UI *(HAL-174)*
-
-Open question: separate `mercala-web` repo, or a directory in this monorepo? Not yet decided.
+- [ ] Cart → checkout → payment UI, order confirmation and history *(HAL-174)*
 
 ## Launch & GTM *(gated on Mercala Web — target 2026-10-15)*
 
