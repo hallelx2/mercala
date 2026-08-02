@@ -1,5 +1,6 @@
 package com.mercala.media;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,6 +25,7 @@ public class MediaController {
      * Programmatically triggers a seek to beginning on the consumer group's partitions,
      * initiating a complete replay of image result events.
      */
+    @SecurityRequirements  // Public per SecurityConfig — see HAL-495 — this is probably wrong.
     @PostMapping("/replay")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void triggerReplay() {

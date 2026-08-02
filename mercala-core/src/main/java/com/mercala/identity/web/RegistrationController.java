@@ -1,5 +1,6 @@
 package com.mercala.identity.web;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +33,7 @@ public class RegistrationController {
         this.registrationService = registrationService;
     }
 
+    @SecurityRequirements  // Public: store signup happens before any token exists.
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TenantResponse createTenant(@Valid @RequestBody CreateTenantRequest request) {

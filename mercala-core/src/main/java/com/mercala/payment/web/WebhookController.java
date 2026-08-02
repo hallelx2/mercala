@@ -1,5 +1,7 @@
 package com.mercala.payment.web;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
@@ -30,6 +32,10 @@ import com.mercala.payment.event.PaymentCapturedEvent;
 import com.mercala.platform.multitenancy.TenantContext;
 import com.stripe.model.Event;
 
+// Every endpoint here is public by necessity — payment providers call them with no
+// Mercala token. Authenticity comes from per-provider signature verification, not from
+// the Authorization header, so the document must not claim a bearer token is required.
+@SecurityRequirements
 @RestController
 @RequestMapping("/api/webhooks")
 public class WebhookController {
