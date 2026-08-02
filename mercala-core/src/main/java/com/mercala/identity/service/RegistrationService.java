@@ -36,6 +36,7 @@ public class RegistrationService {
         }
 
         Tenant tenant = new Tenant(request.slug(), request.name());
+        tenant.setDescription(request.description());
         tenant = tenantRepository.save(tenant);
 
         String hashedPassword = passwordEncoder.encode(request.ownerPassword());
@@ -43,6 +44,28 @@ public class RegistrationService {
         userRepository.save(owner);
 
         return tenant;
+    }
+
+    /**
+     * Updates the caller's own store profile. The tenant comes from the security
+     * context, never from the request — there is no way to name another store here,
+     * which is what makes this safe to expose without a slug-vs-context check.
+     */
+    public Tenant updateProfile(com.mercala.identity.web.dto.UpdateTenantRequest request) {
+        java.util.UUID tenantId = com.mercala.platform.multitenancy.TenantContext.getCurrentTenant();
+        if (tenantId == null) {
+            throw new org.springframework.security.access.AccessDeniedException("No tenant in context");
+        }
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tenant not found: " + tenantId));
+
+        if (request.name() != null) {
+            tenant.setName(request.name());
+        }
+        if (request.description() != null) {
+            tenant.setDescription(request.description());
+        }
+        return tenantRepository.save(tenant);
     }
 
     public AppUser addUser(String tenantSlug, CreateUserRequest request) {

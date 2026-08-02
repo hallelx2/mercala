@@ -33,6 +33,10 @@ public class Tenant {
     @Column(nullable = false)
     private String name;
 
+    /** Public storefront blurb — what this store sells, in the merchant's words. */
+    @Column(name = "description")
+    private String description;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private TenantStatus status = TenantStatus.ACTIVE;
@@ -77,6 +81,14 @@ public class Tenant {
 
     public String getSlug() {
         return slug;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getName() {

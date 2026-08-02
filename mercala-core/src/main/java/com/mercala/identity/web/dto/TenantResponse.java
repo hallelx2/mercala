@@ -6,5 +6,6 @@ public record TenantResponse(
         UUID id,
         String slug,
         String name,
-        String status
+        String status,
+        String description
 ) {}

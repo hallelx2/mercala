@@ -29,8 +29,12 @@ import reactor.core.scheduler.Schedulers;
  *
  * <p>The context is set as the first statement inside {@link Flux#defer}, which runs at
  * subscription time on the {@link Schedulers#boundedElastic()} worker chosen by
- * {@link Flux#subscribeOn}. The model call and its tool invocations then run on that same
- * worker, so tools see the right tenant.
+ * {@link Flux#subscribeOn} — that covers everything running on the subscribing worker. It
+ * does <em>not</em> cover Spring AI's tool callbacks, which the model's internal pipeline
+ * runs on other threads (HAL-515); those are covered by the {@code contextWrite} at the
+ * bottom of the chain plus the {@link AgentContextAccessor} registered at application
+ * start, which together make Reactor restore the ThreadLocal on whichever thread carries
+ * each signal.
  *
  * <p>Cleanup is bound to the <em>inner</em> chain rather than the outer one. An outer
  * {@code doFinally} sits downstream of {@code subscribeOn} and therefore runs on whichever
@@ -92,6 +96,14 @@ public class AgentStreamer {
                             .doFinally(signal -> AgentContext.clear());
                 })
                 .subscribeOn(Schedulers.boundedElastic())
+                // The Reactor Context travels upstream from here through every operator —
+                // Spring AI's included. With the AgentContextAccessor registered and
+                // automatic propagation on, Reactor restores the ThreadLocal around each
+                // signal on whatever thread runs it, so tool callbacks executed off the
+                // subscribing worker still see this turn's tenant (HAL-515). Written
+                // explicitly rather than via contextCapture() so it does not depend on
+                // the ThreadLocal state of whichever thread happens to subscribe.
+                .contextWrite(ctx -> ctx.put(AgentContextAccessor.KEY, context))
                 .onErrorResume(error -> {
                     log.error("Agent stream failed — conversation={}", id, error);
                     // A frame, not a failed stream: by the time tokens flow the 200 is

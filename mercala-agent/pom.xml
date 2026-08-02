@@ -41,6 +41,14 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Carries AgentContext (a ThreadLocal) across Reactor thread hops so Spring AI
+             tool callbacks keep their tenant — see AgentContextAccessor (HAL-515). Version
+             managed by the Spring Boot BOM. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>context-propagation</artifactId>
+        </dependency>
+
         <!-- Spring AI OpenAI Starter -->
         <dependency>
             <groupId>org.springframework.ai</groupId>

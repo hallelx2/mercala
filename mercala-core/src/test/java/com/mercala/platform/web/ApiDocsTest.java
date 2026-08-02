@@ -102,6 +102,17 @@ class ApiDocsTest extends AbstractIntegrationTest {
      * annotation at all: it tells a client no token is needed and produces 401s the client
      * has no way to explain.
      */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/public/stores/{slug}",
+            "/api/public/stores/{slug}/products",
+            "/api/public/stores/{slug}/products/{id}",
+            "/api/public/stores/{slug}/search",
+    })
+    void publicStorefrontGetsOptOutOfTheGlobalSecurityRequirement(String path) throws Exception {
+        apiDocs().andExpect(jsonPath("$.paths['" + path + "'].get.security", hasSize(0)));
+    }
+
     @Test
     void protectedEndpointsInheritTheGlobalRequirement() throws Exception {
         apiDocs()

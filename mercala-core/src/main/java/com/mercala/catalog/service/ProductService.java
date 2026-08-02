@@ -144,11 +144,18 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProductResponse> getProducts() {
+    public Page<ProductResponse> getProducts(Pageable pageable) {
         UUID tenantId = getRequiredTenantId();
-        return productRepository.findByTenantId(tenantId).stream()
-                .map(this::mapToProductResponse)
-                .collect(Collectors.toList());
+        return productRepository.findByTenantId(tenantId, pageable)
+                .map(this::mapToProductResponse);
+    }
+
+    /** Storefront view: only ACTIVE products are visible to the public. */
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> getActiveProducts(Pageable pageable) {
+        UUID tenantId = getRequiredTenantId();
+        return productRepository.findByTenantIdAndStatus(tenantId, ProductStatus.ACTIVE, pageable)
+                .map(this::mapToProductResponse);
     }
 
     @Transactional(readOnly = true)

@@ -84,7 +84,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_AI_OPENAI_API_KEY: {{ openai_api_key }}
       SPRING_AI_OPENAI_BASE_URL: {{ openai_base_url | default('http://nginx:8085', true) }}
-      SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: {{ openai_model | default('glm-4-7', true) }}
+      SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL: {{ openai_model | default('glm-4.5-air', true) }}
       MERCALA_CORE_BASE_URL: http://core:8080
       JAVA_OPTS: "-Xmx256m -Xms128m"
     depends_on:
