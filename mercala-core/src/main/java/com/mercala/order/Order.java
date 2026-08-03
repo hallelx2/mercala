@@ -49,8 +49,14 @@ public class Order {
      * so Postgres owns the value and Hibernate must not try to write it. Needed because an
      * order list is read chronologically and the primary key is a random UUID — sorting by
      * id looks ordered but is arbitrary.
+     *
+     * <p>{@code @Generated(INSERT)} makes Hibernate read the value back after the insert.
+     * Without it the field stays null on the instance that was just saved, so the order
+     * returned straight out of checkout claimed to have no date while the row in the
+     * database had one — invisible until the response started carrying the field.
      */
     @Column(name = "created_at", insertable = false, updatable = false)
+    @org.hibernate.annotations.Generated(event = org.hibernate.generator.EventType.INSERT)
     private java.time.Instant createdAt;
 
 

@@ -94,6 +94,7 @@ public class OrderController {
                 order.getStatus(),
                 order.getTotalAmount(),
                 order.getIdempotencyKey(),
-                lines);
+                lines,
+                order.getCreatedAt());
     }
 }
