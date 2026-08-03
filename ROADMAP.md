@@ -103,14 +103,15 @@ One-line: it runs on AWS, deploys itself, and holds no static credentials.
 - [ ] Micrometer → Prometheus → Grafana *(HAL-165)*
 - [ ] OpenTelemetry distributed tracing across core ↔ agent ↔ image-gen *(HAL-166)*
 - [ ] Harden Compose + CI — image pinning, port binding, least-privilege permissions *(HAL-192)*
-- [x] **Product imagery is fetchable** *(HAL-425)* — a second, public-read bucket holding
-      nothing but finished images. The original bucket keeps Terraform state, the Let's Encrypt
-      archive, the nightly pg_dump and merchants' own uploads, and stays fully private: a
-      prefix-scoped public policy on that bucket would have been one typo from publishing the
-      database. Merchant uploads are viewed through a presigned redirect. image-gen now reads
-      sources through the S3 client rather than anonymous HTTP — which is why enhancement had
-      never worked outside a laptop. CloudFront waits for content-addressed keys; caching in
-      front of a key that gets overwritten serves the previous picture.
+- [x] **Product imagery loads in a browser** *(HAL-425)* — images are served as presigned
+      URLs minted per request, so the bucket stays entirely private. It holds the Terraform
+      state, the Let's Encrypt archive, the nightly pg_dump and merchants' own uploads, and a
+      public policy scoped to a prefix on it would have been one typo from publishing the
+      database. image-gen also reads source photographs through the S3 client rather than
+      anonymous HTTP — which is why enhancement had only ever worked on a laptop.
+- [ ] Split media into its own public bucket, behind a CDN, with content-addressed keys
+      *(HAL-577)* — blocked on a one-time local `terraform apply` in `devops/terraform/bootstrap`:
+      the CI deploy role is scoped to one bucket by name and cannot create a second.
 - [ ] Verify the deploy host's SSH key *(HAL-460)* — `StrictHostKeyChecking=no` sends every
       secret to whatever answers on that IP
 - [ ] Narrow the deploy role's `ec2:*` grant *(HAL-438)*

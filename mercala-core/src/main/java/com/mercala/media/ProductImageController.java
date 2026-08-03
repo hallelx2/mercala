@@ -1,8 +1,11 @@
 package com.mercala.media;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,15 +30,30 @@ import io.swagger.v3.oas.annotations.Operation;
  * <p>Under {@code /api/products} rather than {@code /api/media} deliberately: the media
  * prefix is blanket-permitted for anonymous callers (HAL-495), and a product's imagery is
  * a merchant's own data.
+ *
+ * <p>Each image comes back twice: the stored URL, which is stable and is what a client
+ * should key on, and a presigned one it can actually load. The bucket is private and stays
+ * that way — it holds the Terraform state, the TLS archive and the database backups
+ * alongside the pictures (HAL-425).
  */
 @RestController
 @RequestMapping("/api/products")
 public class ProductImageController {
 
-    private final ProductImageRepository productImages;
+    private static final Logger log = LoggerFactory.getLogger(ProductImageController.class);
 
-    public ProductImageController(ProductImageRepository productImages) {
+    /**
+     * Long enough to load a dashboard and sit looking at it; short enough that a URL
+     * copied out of devtools is not a lasting grant.
+     */
+    private static final Duration VIEW_TTL = Duration.ofMinutes(15);
+
+    private final ProductImageRepository productImages;
+    private final MediaObjectStorage storage;
+
+    public ProductImageController(ProductImageRepository productImages, MediaObjectStorage storage) {
         this.productImages = productImages;
+        this.storage = storage;
     }
 
     @Operation(
@@ -56,10 +74,32 @@ public class ProductImageController {
         }
 
         return productImages
-                .findByTenantIdAndProductIdOrderByCreatedAtDesc(principal.tenantId(), productId)
+                .findByTenantIdAndProductIdOrderByCreatedAtDescIdDesc(principal.tenantId(), productId)
                 .stream()
                 .map(image -> new ProductImageResponse(
-                        image.getId(), image.getProductId(), image.getUrl(), image.getCreatedAt()))
+                        image.getId(),
+                        image.getProductId(),
+                        image.getUrl(),
+                        presign(image.getUrl()),
+                        image.getCreatedAt()))
                 .toList();
+    }
+
+    /**
+     * The stored URL points into a private bucket, so a browser given it gets a 403. This
+     * is what makes the picture actually appear: a signature valid for long enough to load
+     * the page and look at it, minted here because the caller has already been
+     * authenticated and scoped to their own tenant by the query above.
+     *
+     * <p>A failure is a null rather than a 500. Storage being unreachable should cost the
+     * merchant their thumbnails, not their product page.
+     */
+    private String presign(String url) {
+        try {
+            return storage.presignedView(storage.objectKeyOf(url), VIEW_TTL);
+        } catch (RuntimeException e) {
+            log.warn("Could not presign {}: {}", url, e.getMessage());
+            return null;
+        }
     }
 }
