@@ -80,9 +80,9 @@ class ApiDocsTest extends AbstractIntegrationTest {
      * matchers with ant patterns, so a shared constant would only cover part of it and give
      * false confidence about the rest.
      *
-     * <p>{@code /api/media/replay} appears here because the API genuinely behaves this way
-     * today, not because it should — see HAL-495. When that rule changes this case fails
-     * until the document follows, which is the point.
+     * <p>Every entry has a reason to be reachable without a token: login is where tokens
+     * come from, tenant signup precedes any account, and webhooks are called by payment
+     * providers and authenticated by signature instead.
      */
     @ParameterizedTest
     @ValueSource(strings = {
@@ -92,7 +92,6 @@ class ApiDocsTest extends AbstractIntegrationTest {
             "/api/webhooks/stripe",
             "/api/webhooks/paystack",
             "/api/webhooks/flutterwave",
-            "/api/media/replay",
     })
     void publicEndpointsOptOutOfTheGlobalSecurityRequirement(String path) throws Exception {
         apiDocs().andExpect(jsonPath("$.paths['" + path + "'].post.security", hasSize(0)));
@@ -120,5 +119,16 @@ class ApiDocsTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/products'].get.security").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/cart'].get.security").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/orders'].get.security").doesNotExist());
+    }
+
+    /**
+     * Replay used to sit in the public list above, because it genuinely was public
+     * (HAL-495). It is now PLATFORM_ADMIN only, and this is the assertion that catches the
+     * document drifting back — an empty security array here would tell a generated client
+     * that no token is needed for a cross-tenant Kafka replay.
+     */
+    @Test
+    void mediaReplayIsDocumentedAsRequiringAToken() throws Exception {
+        apiDocs().andExpect(jsonPath("$.paths['/api/media/replay'].post.security").doesNotExist());
     }
 }
