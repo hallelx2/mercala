@@ -19,5 +19,10 @@ output "ecr_repository_urls" {
 
 output "s3_bucket_name" {
   value       = aws_s3_bucket.media.id
-  description = "The name of the S3 bucket for media"
+  description = "The private bucket: Terraform state, TLS material, database backups, merchant uploads"
+}
+
+output "s3_public_bucket_name" {
+  value       = aws_s3_bucket.public_media.id
+  description = "The public-read bucket holding finished product imagery"
 }

@@ -137,6 +137,7 @@ jobs:
         run: |
           echo "public_ip=$(terraform output -raw public_ip)" >> $GITHUB_OUTPUT
           echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
+          echo "s3_public_bucket_name=$(terraform output -raw s3_public_bucket_name)" >> $GITHUB_OUTPUT
         working-directory: devops/terraform
 
       # Ansible Configuration & Deployment
@@ -163,6 +164,7 @@ jobs:
           TARGET_HOST: ${{ steps.tf-outputs.outputs.public_ip }}
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           S3_BUCKET_NAME: ${{ steps.tf-outputs.outputs.s3_bucket_name }}
+          S3_PUBLIC_BUCKET_NAME: ${{ steps.tf-outputs.outputs.s3_public_bucket_name }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -185,6 +187,7 @@ jobs:
             --arg jwt_secret_env          "$JWT_SECRET" \
             --arg openai_api_key_env      "$OPENAI_API_KEY" \
             --arg s3_bucket_name_env      "$S3_BUCKET_NAME" \
+            --arg s3_public_bucket_name_env "$S3_PUBLIC_BUCKET_NAME" \
             --arg ecr_core_url_env        "$ECR_REGISTRY/mercala-core" \
             --arg ecr_agent_url_env       "$ECR_REGISTRY/mercala-agent" \
             --arg ecr_image_gen_url_env   "$ECR_REGISTRY/mercala-image-gen" \

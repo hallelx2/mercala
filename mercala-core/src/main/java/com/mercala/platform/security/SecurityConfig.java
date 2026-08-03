@@ -56,8 +56,11 @@ public class SecurityConfig {
                         // Ahead of the blanket /api/media rule below, because first match
                         // wins: an upload writes to the tenant's storage prefix and must
                         // never be anonymous. The blanket rule is legacy and is being
-                        // narrowed under HAL-495; this endpoint does not wait for that.
+                        // narrowed under HAL-495; these endpoints do not wait for that.
                         .requestMatchers(HttpMethod.POST, "/api/media/uploads").authenticated()
+                        // Mints a presigned URL for a private object. Anonymous access here
+                        // would hand out signatures for other merchants' photographs.
+                        .requestMatchers(HttpMethod.GET, "/api/media/view").authenticated()
                         .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/media/**")).permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e

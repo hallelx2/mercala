@@ -75,6 +75,7 @@ services:
       # defaults and authenticate to real S3 as a user that does not exist.
       MINIO_ENDPOINT: {{ s3_endpoint }}
       MINIO_BUCKET: {{ s3_bucket_name }}
+      MINIO_PUBLIC_BUCKET: {{ s3_public_bucket_name }}
       MINIO_ACCESS_KEY: ""
       MINIO_SECRET_KEY: ""
       MINIO_SESSION_TOKEN: ""
@@ -121,6 +122,7 @@ services:
       REPLICATE_MODEL: {{ replicate_model | default('black-forest-labs/flux-schnell', true) }}
       MINIO_ENDPOINT: {{ s3_endpoint }}
       MINIO_BUCKET: {{ s3_bucket_name }}
+      MINIO_PUBLIC_BUCKET: {{ s3_public_bucket_name }}
       # Explicitly blank, not omitted. application.yml defaults these to "minioadmin"
       # for local MinIO, so omitting them here would leave the container authenticating
       # to real S3 with minioadmin/minioadmin instead of the instance profile. Blank

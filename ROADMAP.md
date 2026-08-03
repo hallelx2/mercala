@@ -103,8 +103,14 @@ One-line: it runs on AWS, deploys itself, and holds no static credentials.
 - [ ] Micrometer → Prometheus → Grafana *(HAL-165)*
 - [ ] OpenTelemetry distributed tracing across core ↔ agent ↔ image-gen *(HAL-166)*
 - [ ] Harden Compose + CI — image pinning, port binding, least-privilege permissions *(HAL-192)*
-- [ ] Serve generated images publicly *(HAL-425)* — bucket has Block Public Access, so object
-      URLs 403 for shoppers. CloudFront vs presigned URLs vs a public prefix. Blocks HAL-173.
+- [x] **Product imagery is fetchable** *(HAL-425)* — a second, public-read bucket holding
+      nothing but finished images. The original bucket keeps Terraform state, the Let's Encrypt
+      archive, the nightly pg_dump and merchants' own uploads, and stays fully private: a
+      prefix-scoped public policy on that bucket would have been one typo from publishing the
+      database. Merchant uploads are viewed through a presigned redirect. image-gen now reads
+      sources through the S3 client rather than anonymous HTTP — which is why enhancement had
+      never worked outside a laptop. CloudFront waits for content-addressed keys; caching in
+      front of a key that gets overwritten serves the previous picture.
 - [ ] Verify the deploy host's SSH key *(HAL-460)* — `StrictHostKeyChecking=no` sends every
       secret to whatever answers on that IP
 - [ ] Narrow the deploy role's `ec2:*` grant *(HAL-438)*
