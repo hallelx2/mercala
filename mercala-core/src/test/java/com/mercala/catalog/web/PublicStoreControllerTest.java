@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +19,10 @@ import com.mercala.identity.AppUserRepository;
 import com.mercala.identity.Role;
 import com.mercala.identity.Tenant;
 import com.mercala.identity.TenantRepository;
+import com.mercala.media.MediaObjectStorage;
+import com.mercala.media.ProductImage;
+import com.mercala.media.ProductImageRepository;
+import com.mercala.platform.multitenancy.TenantContext;
 import com.mercala.platform.security.JwtService;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -41,6 +46,38 @@ class PublicStoreControllerTest extends AbstractIntegrationTest {
     @Autowired private AppUserRepository userRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private JwtService jwtService;
+    @Autowired private ProductImageRepository productImages;
+
+    // No object storage in a test run, and signing is not what these assert.
+    @MockBean private MediaObjectStorage storage;
+
+    private static final String STORED_URL = "http://storage/tenant/product.png";
+    private static final String SIGNED_URL = "http://storage/tenant/product.png?X-Amz-Signature=abc";
+
+    @org.junit.jupiter.api.BeforeEach
+    void stubSigning() {
+        org.mockito.Mockito.when(storage.objectKeyOf(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("tenant/product.png");
+        org.mockito.Mockito.when(storage.presignedView(
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any(java.time.Duration.class)))
+                .thenReturn(SIGNED_URL);
+    }
+
+    /** The image worker writes outside a request, so the tenant is installed the same way. */
+    private void attachImage(UUID tenantId, UUID productId, String url) {
+        UUID previous = TenantContext.getCurrentTenant();
+        TenantContext.setCurrentTenant(tenantId);
+        try {
+            productImages.save(new ProductImage(tenantId, productId, url));
+        } finally {
+            if (previous != null) {
+                TenantContext.setCurrentTenant(previous);
+            } else {
+                TenantContext.clear();
+            }
+        }
+    }
 
     private Tenant createTenant(String slug, String description) {
         Tenant tenant = new Tenant(slug, slug + " Shop");
@@ -135,5 +172,59 @@ class PublicStoreControllerTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(0));
         mockMvc.perform(get("/api/public/stores/quiet-shop/products/" + productId))
                 .andExpect(status().isNotFound());
+    }
+
+    /**
+     * The point of HAL-589, asserted anonymously: a shopper with no session gets a URL that
+     * loads. The stored one is a 403 from a browser — the bucket is private — so the signed
+     * one is what makes a storefront look like a shop.
+     */
+    @Test
+    void aShopperSeesProductImagesWithoutAnyCredentials() throws Exception {
+        Tenant tenant = createTenant("linen-shop", null);
+        String token = ownerToken(tenant);
+        String productId = createProduct(token, "Linen shirt");
+        attachImage(tenant.getId(), UUID.fromString(productId), STORED_URL);
+
+        mockMvc.perform(get("/api/public/stores/linen-shop/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].images.length()").value(1))
+                .andExpect(jsonPath("$.content[0].images[0].url").value(STORED_URL))
+                .andExpect(jsonPath("$.content[0].images[0].viewUrl").value(SIGNED_URL));
+
+        mockMvc.perform(get("/api/public/stores/linen-shop/products/" + productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.images[0].viewUrl").value(SIGNED_URL));
+    }
+
+    @Test
+    void aProductWithNoImageryListsAnEmptyArrayRatherThanNull() throws Exception {
+        Tenant tenant = createTenant("bare-shop", null);
+        createProduct(ownerToken(tenant), "Linen shirt");
+
+        mockMvc.perform(get("/api/public/stores/bare-shop/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].images").isArray())
+                .andExpect(jsonPath("$.content[0].images.length()").value(0));
+    }
+
+    /** Imagery must not become the field through which one store sees another's. */
+    @Test
+    void oneStoresImageryNeverAppearsOnAnothersStorefront() throws Exception {
+        Tenant mine = createTenant("mine-shop", null);
+        Tenant theirs = createTenant("theirs-shop", null);
+        String myProduct = createProduct(ownerToken(mine), "Mine");
+        String theirProduct = createProduct(ownerToken(theirs), "Theirs");
+        attachImage(theirs.getId(), UUID.fromString(theirProduct), STORED_URL);
+
+        mockMvc.perform(get("/api/public/stores/mine-shop/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("Mine"))
+                .andExpect(jsonPath("$.content[0].images.length()").value(0));
+
+        // And the id of my own product does not pick up their picture either.
+        mockMvc.perform(get("/api/public/stores/mine-shop/products/" + myProduct))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.images.length()").value(0));
     }
 }

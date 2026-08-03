@@ -226,6 +226,12 @@ cannot drift, the ergonomics stay ours.
 - [~] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)* —
       public API (`/api/public/stores/{slug}` + products/search, ACTIVE-only) and `/s/[slug]`
       browse + search + product pages shipped (PR #64); shopper chat still open
+- [x] **The storefront has pictures** *(HAL-589)* — `ProductResponse` carries its images, each
+      with a stable `url` and a presigned `viewUrl`, attached by a decorator at the edge so a
+      page of twenty-four products costs one image query rather than twenty-four. Cards lead
+      with the photograph; product pages get a gallery; a product without imagery gets a
+      typographic tile rather than a broken frame, and so does one whose signature has
+      expired. The merchant's own catalogue had the same blind spot and gets the same fix.
 - [ ] Cart → checkout → payment UI, order confirmation and history *(HAL-174)* — needs a
       public buying path (guest or shopper accounts); storefront is browse-only until then
 

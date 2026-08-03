@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mercala.catalog.service.ProductService;
+import com.mercala.media.ProductImageDecorator;
 import com.mercala.catalog.web.dto.*;
 
 import jakarta.validation.Valid;
@@ -28,9 +29,11 @@ import jakarta.validation.Valid;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductImageDecorator images;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, ProductImageDecorator images) {
         this.productService = productService;
+        this.images = images;
     }
 
     // --- Product CRUD Endpoints ---
@@ -45,14 +48,16 @@ public class ProductController {
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('MERCHANT_OWNER') or hasRole('MERCHANT_STAFF') or hasRole('SHOPPER')")
     public ProductResponse getProduct(@PathVariable UUID id) {
-        return productService.getProduct(id);
+        return images.decorate(productService.getProduct(id));
     }
 
     @GetMapping
     @PreAuthorize("hasRole('MERCHANT_OWNER') or hasRole('MERCHANT_STAFF') or hasRole('SHOPPER')")
     public Page<ProductResponse> getProducts(
             @PageableDefault(size = 20) Pageable pageable) {
-        return productService.getProducts(pageable);
+        // The merchant's own catalogue had the same blind spot as the storefront: it could
+        // list products and never show what any of them looked like.
+        return images.decorate(productService.getProducts(pageable));
     }
 
     @PutMapping("/{id}")

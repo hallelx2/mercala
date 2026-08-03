@@ -18,6 +18,7 @@ import com.mercala.catalog.service.ProductService;
 import com.mercala.catalog.web.dto.ProductResponse;
 import com.mercala.identity.Tenant;
 import com.mercala.identity.TenantRepository;
+import com.mercala.media.ProductImageDecorator;
 import com.mercala.platform.multitenancy.TenantContext;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -45,10 +46,15 @@ public class PublicStoreController {
 
     private final TenantRepository tenantRepository;
     private final ProductService productService;
+    private final ProductImageDecorator images;
 
-    public PublicStoreController(TenantRepository tenantRepository, ProductService productService) {
+    public PublicStoreController(
+            TenantRepository tenantRepository,
+            ProductService productService,
+            ProductImageDecorator images) {
         this.tenantRepository = tenantRepository;
         this.productService = productService;
+        this.images = images;
     }
 
     /** Public store profile: name and what it sells. */
@@ -64,7 +70,9 @@ public class PublicStoreController {
     public Page<ProductResponse> products(
             @PathVariable String slug,
             @PageableDefault(size = 24) Pageable pageable) {
-        return withTenant(slug, () -> productService.getActiveProducts(pageable));
+        // Decorated inside withTenant: the images lookup is tenant-scoped too, and the
+        // slug is the only thing that established which tenant this is.
+        return withTenant(slug, () -> images.decorate(productService.getActiveProducts(pageable)));
     }
 
     @GetMapping("/products/{id}")
@@ -76,7 +84,7 @@ public class PublicStoreController {
                 // is not public information.
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found");
             }
-            return product;
+            return images.decorate(product);
         });
     }
 
@@ -85,7 +93,7 @@ public class PublicStoreController {
             @PathVariable String slug,
             @RequestParam String q,
             @PageableDefault(size = 24) Pageable pageable) {
-        return withTenant(slug, () -> productService.searchHybrid(q, pageable));
+        return withTenant(slug, () -> images.decorate(productService.searchHybrid(q, pageable)));
     }
 
     private Tenant resolve(String slug) {
