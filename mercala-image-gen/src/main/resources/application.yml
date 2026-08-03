@@ -26,7 +26,13 @@ mercala:
     secret-key: ${MINIO_SECRET_KEY:minioadmin}
     session-token: ${MINIO_SESSION_TOKEN:}
     region: ${AWS_REGION:}
+    # Private: merchants' uploaded originals are read from here, and nothing in it is
+    # anonymously readable.
     bucket: ${MINIO_BUCKET:mercala-images}
+    # Public: finished product imagery is written here, and shoppers load it straight
+    # from an <img> tag. Two buckets rather than two prefixes, because the private one
+    # also holds the Terraform state, the TLS archive and the database backups (HAL-425).
+    public-bucket: ${MINIO_PUBLIC_BUCKET:mercala-public-images}
   image-gen:
     # Primary provider, then the ordered chain tried when it fails or is unconfigured.
     # 'placeholder' is local and cannot fail, so it anchors the chain.

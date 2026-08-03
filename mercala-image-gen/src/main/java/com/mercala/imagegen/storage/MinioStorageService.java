@@ -1,6 +1,7 @@
 package com.mercala.imagegen.storage;
 
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -31,6 +32,7 @@ public class MinioStorageService implements StorageService {
     private final String sessionToken;
     private final String region;
     private final String bucket;
+    private final String publicBucket;
 
     private MinioClient minioClient;
 
@@ -40,13 +42,15 @@ public class MinioStorageService implements StorageService {
             @Value("${mercala.storage.secret-key:}") String secretKey,
             @Value("${mercala.storage.session-token:}") String sessionToken,
             @Value("${mercala.storage.region:}") String region,
-            @Value("${mercala.storage.bucket}") String bucket) {
+            @Value("${mercala.storage.bucket}") String bucket,
+            @Value("${mercala.storage.public-bucket:${mercala.storage.bucket}}") String publicBucket) {
         this.endpoint = endpoint;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
         this.sessionToken = sessionToken;
         this.region = region;
         this.bucket = bucket;
+        this.publicBucket = publicBucket;
     }
 
     @PostConstruct
@@ -61,7 +65,10 @@ public class MinioStorageService implements StorageService {
             applyCredentials(builder);
             this.minioClient = builder.build();
 
-            ensureBucketExists();
+            ensureBucketExists(bucket);
+            if (!publicBucket.equals(bucket)) {
+                ensureBucketExists(publicBucket);
+            }
             applyPublicReadPolicy();
         } catch (Exception e) {
             log.error("Failed to initialize storage client for endpoint {}", endpoint, e);
@@ -120,22 +127,28 @@ public class MinioStorageService implements StorageService {
     }
 
     /**
-     * In the deployed stack Terraform already created the bucket, so this is a no-op
+     * In the deployed stack Terraform already created both buckets, so this is a no-op
      * check. It matters for local MinIO, which starts empty.
      */
-    private void ensureBucketExists() throws Exception {
-        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+    private void ensureBucketExists(String name) throws Exception {
+        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(name).build());
         if (!exists) {
-            log.info("Creating storage bucket: {}", bucket);
-            minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+            log.info("Creating storage bucket: {}", name);
+            minioClient.makeBucket(MakeBucketArgs.builder().bucket(name).build());
         }
     }
 
     /**
-     * Local MinIO needs an explicit public-read policy for generated images to be
-     * fetchable by the storefront. On real S3 this is expected to fail — the bucket
-     * has Block Public Access on — so the failure is logged and tolerated rather than
-     * being allowed to kill startup.
+     * Local MinIO needs an explicit public-read policy for product imagery to be fetchable
+     * by a browser. Terraform grants the same thing on the deployed public bucket, so this
+     * only exists to make a laptop behave like production.
+     *
+     * <p>Applied to the <em>public</em> bucket alone. It used to run against the only
+     * bucket there was — the one that also holds the Terraform state, the Let's Encrypt
+     * archive and the nightly database dump. On S3 that call failed, which is the only
+     * reason it was survivable; locally it succeeded, which meant a developer's machine
+     * published everything the deployed stack keeps private. Setting it on a bucket that
+     * contains nothing but finished images makes local and deployed agree (HAL-425).
      */
     private void applyPublicReadPolicy() {
         try {
@@ -151,13 +164,13 @@ public class MinioStorageService implements StorageService {
                         }
                       ]
                     }
-                    """.formatted(bucket);
+                    """.formatted(publicBucket);
             minioClient.setBucketPolicy(
-                    SetBucketPolicyArgs.builder().bucket(bucket).config(policyJson).build()
+                    SetBucketPolicyArgs.builder().bucket(publicBucket).config(policyJson).build()
             );
         } catch (Exception e) {
-            log.warn("Could not set public-read bucket policy on {} (expected on S3 with Block Public Access): {}",
-                    bucket, e.getMessage());
+            log.warn("Could not set public-read bucket policy on {} (expected on S3, where Terraform owns it): {}",
+                    publicBucket, e.getMessage());
         }
     }
 
@@ -174,24 +187,53 @@ public class MinioStorageService implements StorageService {
         ImageFormat format = ImageFormat.detect(imageBytes);
         String objectName = tenantId + "/" + productId + suffix(variant) + "." + format.extension();
 
+        // The public bucket: this is a finished picture, and a shopper's browser has to
+        // fetch it with no credentials and no session (HAL-425).
         try {
-            log.info("Uploading {} image to bucket={} object={}", format, bucket, objectName);
+            log.info("Uploading {} image to bucket={} object={}", format, publicBucket, objectName);
             try (ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes)) {
                 minioClient.putObject(
                         PutObjectArgs.builder()
-                                .bucket(bucket)
+                                .bucket(publicBucket)
                                 .object(objectName)
                                 .stream(bais, imageBytes.length, -1)
                                 .contentType(format.contentType())
                                 .build()
                 );
             }
-            String url = endpoint + "/" + bucket + "/" + objectName;
+            String url = endpoint + "/" + publicBucket + "/" + objectName;
             log.info("Successfully uploaded image. URL: {}", url);
             return url;
         } catch (Exception e) {
             log.error("Failed to upload image to storage", e);
             throw new RuntimeException("Image upload failure", e);
+        }
+    }
+
+    /**
+     * Reads an object back, with credentials.
+     *
+     * <p>This is how a merchant's uploaded photograph reaches the enhancement providers.
+     * It used to be an anonymous HTTP GET, which worked against local MinIO — because the
+     * storage service had made that bucket world-readable — and returned 403 against the
+     * deployed bucket. Image enhancement therefore worked on a laptop and had never once
+     * worked in production.
+     *
+     * <p>Reading through the client also disposes of the SSRF surface the caller's URL
+     * allow-list was there to contain: there is no outbound HTTP request left to redirect.
+     */
+    @Override
+    public byte[] readObject(String url) {
+        ObjectRef ref = ObjectRef.parse(url, endpoint, bucket, publicBucket);
+
+        try (var stream = minioClient.getObject(
+                GetObjectArgs.builder().bucket(ref.bucket()).object(ref.key()).build())) {
+            byte[] bytes = stream.readAllBytes();
+            log.info("Read {} bytes from bucket={} object={}", bytes.length, ref.bucket(), ref.key());
+            return bytes;
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Could not read " + ref.key() + " from " + ref.bucket(), e);
         }
     }
 

@@ -10,6 +10,10 @@
     jwt_secret: "{{ jwt_secret_env }}"
     openai_api_key: "{{ openai_api_key_env }}"
     s3_bucket_name: "{{ s3_bucket_name_env }}"
+    # Finished product imagery only. Separate from the bucket above, which holds the
+    # Terraform state, the Let's Encrypt archive, the database backups and merchants'
+    # own uploads — none of which may ever be anonymously readable (HAL-425).
+    s3_public_bucket_name: "{{ s3_public_bucket_name_env }}"
     s3_endpoint: "https://s3.{{ aws_region }}.amazonaws.com"
     ecr_core_url: "{{ ecr_core_url_env }}"
     ecr_agent_url: "{{ ecr_agent_url_env }}"

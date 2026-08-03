@@ -1,6 +1,7 @@
 package com.mercala.media;
 
 import java.io.ByteArrayInputStream;
+import java.time.Duration;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -10,26 +11,30 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import io.minio.BucketExistsArgs;
+import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.credentials.IamAwsProvider;
+import io.minio.http.Method;
 import io.minio.credentials.StaticProvider;
 import jakarta.annotation.PostConstruct;
 
 /**
- * Stores merchant uploads in the same bucket the image worker writes to.
+ * Stores merchant uploads in the private bucket, and only there.
  *
- * <p>One bucket on purpose: an enhancement reads the merchant's original and writes its
- * result, and both have to be reachable by the same worker with the same credentials.
- * Splitting them would mean a second bucket policy, a second set of grants, and a second
- * thing to get wrong.
+ * <p>Uploads are the merchant's raw material, not published work: an enhancement they
+ * reject should not stay world-readable forever. So they sit beside the Terraform state,
+ * the Let's Encrypt archive and the nightly database dump, in a bucket with Block Public
+ * Access fully on. The image worker reads them with credentials, and the dashboard views
+ * them through a presigned URL that expires. Finished product imagery goes somewhere else
+ * entirely — a second, public-read bucket that contains nothing but pictures meant to be
+ * seen (HAL-425).
  *
  * <p>Credential resolution mirrors {@code mercala-image-gen}'s storage service — static
  * key and session token, static key and secret, or the host's IAM instance profile — because
  * the two processes run against the same endpoint under the same deployment rules. That the
- * logic exists twice is a real duplication and is tracked as its own issue; inlining it here
- * was the smaller of the two costs while this feature landed.
+ * logic exists twice is a real duplication, tracked as HAL-567.
  */
 @Service
 public class MediaObjectStorage {
@@ -89,6 +94,60 @@ public class MediaObjectStorage {
 
     public boolean isReady() {
         return minioClient != null;
+    }
+
+    /**
+     * A short-lived URL a browser can use to view a private object.
+     *
+     * <p>Merchant uploads live in the private bucket and stay there: they are the raw
+     * material, and an enhancement the merchant rejects would otherwise remain
+     * world-readable forever. So the dashboard cannot link to them directly, and this is
+     * how it shows them — a signature that expires, minted per request for a caller who
+     * has already been authenticated and checked against the object's tenant prefix.
+     *
+     * @param objectKey the key inside the private bucket, already checked by the caller
+     */
+    public String presignedView(String objectKey, Duration ttl) {
+        if (minioClient == null) {
+            throw new MediaStorageException("Image storage is not available right now");
+        }
+        try {
+            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .expiry((int) ttl.toSeconds())
+                    .build());
+        } catch (Exception e) {
+            log.error("Could not presign {}", objectKey, e);
+            throw new MediaStorageException("Could not open that image", e);
+        }
+    }
+
+    /**
+     * Recovers the object key from a URL this service produced.
+     *
+     * <p>Path-style only, which is the single shape {@link #put} writes. The caller is
+     * responsible for deciding whether the key belongs to them — this only establishes
+     * that the URL names an object in <em>this</em> bucket, and refuses everything else
+     * before any credentialed call is made.
+     *
+     * <p>The same parsing exists in {@code mercala-image-gen}'s {@code ObjectRef}; both
+     * disappear when the storage client is extracted (HAL-567).
+     */
+    public String objectKeyOf(String url) {
+        if (url == null || url.isBlank()) {
+            throw new IllegalArgumentException("An image reference is required");
+        }
+        String prefix = trimSlash(endpoint) + "/" + bucket + "/";
+        if (!url.trim().toLowerCase(Locale.ROOT).startsWith(prefix.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("That image does not belong to this store's uploads");
+        }
+        String key = url.trim().substring(prefix.length());
+        if (key.isBlank() || key.contains("..")) {
+            throw new IllegalArgumentException("That image reference names no object");
+        }
+        return key;
     }
 
     /**
@@ -160,6 +219,11 @@ public class MediaObjectStorage {
         return endpoint != null
                 && endpoint.toLowerCase(Locale.ROOT).contains("amazonaws.com")
                 && LOCAL_DEV_ACCESS_KEY.equals(accessKey == null ? null : accessKey.trim());
+    }
+
+    private static String trimSlash(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 
     private static boolean hasText(String value) {

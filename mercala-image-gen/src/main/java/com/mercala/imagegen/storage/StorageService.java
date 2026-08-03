@@ -18,6 +18,19 @@ public interface StorageService {
     String uploadImage(UUID tenantId, UUID productId, byte[] imageBytes);
 
     /**
+     * Reads an object back out of storage, with credentials.
+     *
+     * <p>The merchant's uploaded original lives in the private bucket, so fetching it over
+     * anonymous HTTP returns 403 anywhere the deployment is configured correctly. This is
+     * the credentialed path, and the only one that works in production.
+     *
+     * @param url a URL this system previously produced
+     * @throws IllegalArgumentException if the URL does not name an object in one of this
+     *                                  deployment's buckets
+     */
+    byte[] readObject(String url);
+
+    /**
      * Uploads under a named variant so it does not collide with the product's other images.
      *
      * <p>The plain three-argument form writes to a deterministic object name, which is

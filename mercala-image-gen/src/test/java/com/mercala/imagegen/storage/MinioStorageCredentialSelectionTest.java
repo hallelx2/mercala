@@ -17,7 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MinioStorageCredentialSelectionTest {
 
     private static MinioStorageService service(String endpoint, String accessKey, String secretKey) {
-        return new MinioStorageService(endpoint, accessKey, secretKey, "", "us-east-1", "mercala-images");
+        return new MinioStorageService(
+                endpoint, accessKey, secretKey, "", "us-east-1", "mercala-images", "mercala-public-images");
     }
 
     @Test
