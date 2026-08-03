@@ -1,5 +1,6 @@
 package com.mercala.media;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,4 +36,14 @@ public interface ProductImageRepository extends JpaRepository<ProductImage, UUID
      * filter and RLS as the second and third layers rather than the only ones.
      */
     List<ProductImage> findByTenantIdAndProductIdOrderByCreatedAtDescIdDesc(UUID tenantId, UUID productId);
+
+    /**
+     * Every image for a page of products, in one query.
+     *
+     * <p>The alternative — asking per product — is one round trip per row, which on a
+     * storefront page of twenty-four is twenty-four. Same ordering and the same explicit
+     * tenant scoping as the single-product query above.
+     */
+    List<ProductImage> findByTenantIdAndProductIdInOrderByCreatedAtDescIdDesc(
+            UUID tenantId, Collection<UUID> productIds);
 }
