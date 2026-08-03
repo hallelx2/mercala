@@ -195,6 +195,17 @@ cannot drift, the ergonomics stay ours.
 - [x] **Image studio in chat** *(HAL-562)* — attach a photograph, watch it retouched, compare
       before and after on a slider. The result arrives out-of-band through Kafka, so the card
       polls the product's imagery rather than pretending the stream carries it.
+- [x] **The overview is a place to work** *(HAL-576)* — an ask bar that hands its sentence to
+      the agent, metrics that decompose into settled-versus-open, a fortnight of orders drawn
+      from real dates, a "needs you" queue where every row links to the thing that fixes it,
+      a best-seller ranking by units, and **Create a new store** as a card among the account's
+      stores. A brand-new store gets a four-step checklist instead of four empty panels.
+      The arithmetic lives outside the JSX with 31 tests, because "which orders count as
+      revenue" is a product decision, not markup.
+- [x] `createdAt` on `OrderResponse` *(HAL-575)* — the entity always had it and the response
+      dropped it, so nothing time-shaped could be built. Exposing it surfaced a latent bug:
+      the column is database-owned, so the order returned straight out of checkout claimed no
+      date while its row had one.
 - [x] Store profile — `tenants.description`, enriched `/auth/me`, `PATCH /api/tenants/me`,
       captured at signup and editable in settings *(PR #64)*
 - [x] Identity-first signup *(HAL-552, PR #67)* — sign up as a person (name/email/password),
