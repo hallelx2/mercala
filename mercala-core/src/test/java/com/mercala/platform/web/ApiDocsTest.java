@@ -129,6 +129,12 @@ class ApiDocsTest extends AbstractIntegrationTest {
      */
     @Test
     void mediaReplayIsDocumentedAsRequiringAToken() throws Exception {
-        apiDocs().andExpect(jsonPath("$.paths['/api/media/replay'].post.security").doesNotExist());
+        apiDocs()
+                // The operation has to be there for the next line to mean anything: absent
+                // security on an absent path also "passes", and a security-contract test
+                // that holds when the endpoint has vanished from the document is not a
+                // contract, it is a formality (review finding on PR #78).
+                .andExpect(jsonPath("$.paths['/api/media/replay'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/media/replay'].post.security").doesNotExist());
     }
 }
