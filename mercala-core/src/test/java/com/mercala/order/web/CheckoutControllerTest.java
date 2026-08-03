@@ -121,18 +121,21 @@ class CheckoutControllerTest extends AbstractIntegrationTest {
 
         UUID orderId = UUID.fromString(com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.id"));
 
-        // Reading it back carries the same timestamp: everything time-shaped on the
-        // client — the dashboard's chart, "your last order was three weeks ago" — is
-        // built on this field being present on the list and detail responses too.
+        // Reading it back carries the same timestamp, asserted as equality rather than as
+        // presence: three code paths build this response, and three different-but-present
+        // timestamps would satisfy an existence check while making the dashboard's chart
+        // disagree with its own order list.
+        String placedAt = com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.createdAt");
+
         mockMvc.perform(get("/api/orders/" + orderId)
                         .header("Authorization", shopperToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.createdAt").exists());
+                .andExpect(jsonPath("$.createdAt").value(placedAt));
 
         mockMvc.perform(get("/api/orders")
                         .header("Authorization", shopperToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].createdAt").exists());
+                .andExpect(jsonPath("$.content[0].createdAt").value(placedAt));
 
         // 4. Cart should now be empty after successful checkout
         mockMvc.perform(get("/api/cart")
