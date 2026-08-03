@@ -55,7 +55,7 @@ data "aws_iam_policy_document" "app_host" {
     ]
   }
 
-  # Merchants' uploaded originals, the Let's Encrypt archive and the nightly pg_dump.
+  # Product imagery written by mercala-image-gen, plus the nightly pg_dump.
   statement {
     sid    = "MediaBucketObjects"
     effect = "Allow"
@@ -68,20 +68,6 @@ data "aws_iam_policy_document" "app_host" {
     resources = ["${aws_s3_bucket.media.arn}/*"]
   }
 
-  # Finished product imagery, written by mercala-image-gen. Anyone may read these over
-  # HTTP; only this host may write them.
-  statement {
-    sid    = "PublicMediaObjects"
-    effect = "Allow"
-    actions = [
-      "s3:AbortMultipartUpload",
-      "s3:DeleteObject",
-      "s3:GetObject",
-      "s3:PutObject",
-    ]
-    resources = ["${aws_s3_bucket.public_media.arn}/*"]
-  }
-
   statement {
     sid    = "MediaBucketList"
     effect = "Allow"
@@ -89,10 +75,7 @@ data "aws_iam_policy_document" "app_host" {
       "s3:GetBucketLocation",
       "s3:ListBucket",
     ]
-    resources = [
-      aws_s3_bucket.media.arn,
-      aws_s3_bucket.public_media.arn,
-    ]
+    resources = [aws_s3_bucket.media.arn]
   }
 }
 

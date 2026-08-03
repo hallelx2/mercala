@@ -195,13 +195,26 @@ data "aws_iam_policy_document" "deploy" {
       "s3:GetObject",
       "s3:GetReplicationConfiguration",
       "s3:ListBucket",
+      # Setting and clearing a bucket policy: needed to grant anonymous read on the
+      # public media bucket, and nowhere else. Without them Terraform can create that
+      # bucket and then fail on the statement that makes it useful.
+      "s3:DeleteBucketPolicy",
+      "s3:PutBucketPolicy",
       "s3:PutBucketPublicAccessBlock",
       "s3:PutBucketTagging",
       "s3:PutObject",
     ]
+    # Scoped to this project's namespace rather than to one bucket by name. The stack now
+    # wants a second bucket — public-read, holding nothing but finished product imagery,
+    # so that the private one can keep the Terraform state, the TLS archive and the
+    # database backups without a public policy anywhere near them (HAL-425, HAL-577).
+    #
+    # This file is applied by hand, locally, with a human's credentials. Until somebody
+    # runs that apply the deploy role cannot create the second bucket, which is why the
+    # main stack does not yet declare it.
     resources = [
-      "arn:aws:s3:::${var.project_name}-media-storage-${var.aws_region}",
-      "arn:aws:s3:::${var.project_name}-media-storage-${var.aws_region}/*",
+      "arn:aws:s3:::${var.project_name}-*",
+      "arn:aws:s3:::${var.project_name}-*/*",
     ]
   }
 
