@@ -112,6 +112,10 @@ One-line: it runs on AWS, deploys itself, and holds no static credentials.
 - [ ] Split media into its own public bucket, behind a CDN, with content-addressed keys
       *(HAL-577)* — blocked on a one-time local `terraform apply` in `devops/terraform/bootstrap`:
       the CI deploy role is scoped to one bucket by name and cannot create a second.
+- [x] **`/api/media` is no longer public** *(HAL-495)* — a `permitAll` wildcard made
+      `POST /api/media/replay`, a cross-tenant Kafka replay trigger, callable by anyone
+      with no token. The wildcard is gone rather than narrowed, so anything added under
+      that prefix is authenticated by default; replay itself is `PLATFORM_ADMIN` only.
 - [ ] Verify the deploy host's SSH key *(HAL-460)* — `StrictHostKeyChecking=no` sends every
       secret to whatever answers on that IP
 - [ ] Narrow the deploy role's `ec2:*` grant *(HAL-438)*

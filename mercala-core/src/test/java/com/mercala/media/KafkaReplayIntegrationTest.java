@@ -3,13 +3,21 @@ package com.mercala.media;
 import com.mercala.AbstractIntegrationTest;
 import com.mercala.contracts.event.ImageResultEvent;
 import com.mercala.platform.idempotency.ProcessedEventRepository;
+import com.mercala.identity.AppUser;
+import com.mercala.identity.AppUserRepository;
+import com.mercala.identity.Role;
 import com.mercala.platform.multitenancy.TenantContext;
+import com.mercala.platform.security.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.annotation.DirtiesContext;
@@ -100,8 +108,11 @@ class KafkaReplayIntegrationTest extends AbstractIntegrationTest {
             TenantContext.clear();
         }
 
-        // 5. Trigger replay via admin REST endpoint
-        ResponseEntity<Void> response = restTemplate.postForEntity("/api/media/replay", null, Void.class);
+        // 5. Trigger replay via the admin REST endpoint. It carries a PLATFORM_ADMIN token
+        // because replay is cross-tenant and no longer reachable without one (HAL-495) —
+        // this call used to be anonymous, which is precisely what that issue was about.
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "/api/media/replay", HttpMethod.POST, platformAdminRequest(), Void.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
 
         // 6. Verify that state is rebuilt (consumer replayed from offset 0)
@@ -115,5 +126,19 @@ class KafkaReplayIntegrationTest extends AbstractIntegrationTest {
                 TenantContext.clear();
             }
         });
+    }
+
+    @Autowired private AppUserRepository appUserRepository;
+    @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private JwtService jwtService;
+
+    /** A platform operator's token — the only identity replay accepts. */
+    private HttpEntity<Void> platformAdminRequest() {
+        AppUser admin = appUserRepository.save(new AppUser(
+                null, "platform-admin-" + UUID.randomUUID() + "@example.test",
+                passwordEncoder.encode("password"), Role.PLATFORM_ADMIN));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(jwtService.issue(admin));
+        return new HttpEntity<>(headers);
     }
 }

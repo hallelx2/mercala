@@ -53,15 +53,13 @@ public class SecurityConfig {
                         // purpose — nothing under /api/public may ever mutate.
                         .requestMatchers(HttpMethod.GET, "/api/public/**").permitAll()
                         .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/webhooks/**")).permitAll()                // public webhooks
-                        // Ahead of the blanket /api/media rule below, because first match
-                        // wins: an upload writes to the tenant's storage prefix and must
-                        // never be anonymous. The blanket rule is legacy and is being
-                        // narrowed under HAL-495; these endpoints do not wait for that.
-                        .requestMatchers(HttpMethod.POST, "/api/media/uploads").authenticated()
-                        // Mints a presigned URL for a private object. Anonymous access here
-                        // would hand out signatures for other merchants' photographs.
-                        .requestMatchers(HttpMethod.GET, "/api/media/view").authenticated()
-                        .requestMatchers(org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher("/api/media/**")).permitAll()
+                        // /api/media is deliberately absent from this list. It used to be
+                        // permitAll on a wildcard, which made POST /api/media/replay —
+                        // a cross-tenant Kafka replay trigger — callable by anyone on the
+                        // internet, and would have silently published every future endpoint
+                        // added under that prefix (HAL-495). It now falls through to
+                        // anyRequest().authenticated() like the rest of the API, with the
+                        // replay endpoint further restricted to PLATFORM_ADMIN at the method.
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) ->                     // 401 (not logged in)
