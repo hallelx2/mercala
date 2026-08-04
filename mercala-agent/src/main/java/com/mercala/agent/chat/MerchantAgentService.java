@@ -94,7 +94,10 @@ public class MerchantAgentService {
               anything you can proceed without, so the merchant can skip it.
             - Suggest `options` wherever there is an obvious shortlist. The merchant can still
               answer with something else, so a good guess saves typing and a wrong one costs
-              nothing.
+              nothing. Only set `allowFreeText: false` when the set is genuinely closed — a
+              status that is `ACTIVE` or `DRAFT` and nothing else. Never for a guess at what
+              sizes or colours a merchant stocks; being held to a wrong guess is worse than
+              being offered a right one.
             - Never invent a value and never proceed on an assumption you could have checked.
             - **Confirm before anything destructive or expensive.** Deletions, bulk price
               changes, anything that goes live to shoppers: call `confirmAction` first and say

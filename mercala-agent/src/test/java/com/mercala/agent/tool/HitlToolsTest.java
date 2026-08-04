@@ -30,9 +30,9 @@ class HitlToolsTest {
     @Test
     void aFormOfSeveralFieldsSurvivesIntact() {
         var fields = fieldsOf(new AskUserArgs("A few details first", List.of(
-                new AskFieldArg("name", "Product name", "text", null, "Nutty Roots", false),
-                new AskFieldArg("price", "Price", "money", null, "24.99", false),
-                new AskFieldArg("photo", "A photograph", "image", null, null, true)), null, null));
+                new AskFieldArg("name", "Product name", "text", null, "Nutty Roots", false, null),
+                new AskFieldArg("price", "Price", "money", null, "24.99", false, null),
+                new AskFieldArg("photo", "A photograph", "image", null, null, true, null)), null, null));
 
         assertThat(fields).hasSize(3);
         assertThat(fields.get(1)).containsEntry("type", "money").containsEntry("optional", false);
@@ -76,8 +76,8 @@ class HitlToolsTest {
     @Test
     void anInventedFieldTypeFallsBackRatherThanBreakingTheCard() {
         var fields = fieldsOf(new AskUserArgs("Details", List.of(
-                new AskFieldArg("email", "Contact", "email", null, null, null),
-                new AskFieldArg("size", "Size", "dropdown", List.of("S", "M"), null, null)),
+                new AskFieldArg("email", "Contact", "email", null, null, null, null),
+                new AskFieldArg("size", "Size", "dropdown", List.of("S", "M"), null, null, null)),
                 null, null));
 
         // No options to fall back on, so a plain input.
@@ -89,9 +89,35 @@ class HitlToolsTest {
     @Test
     void aFieldWithOnlyALabelStillHasANameToAnswerUnder() {
         var fields = fieldsOf(new AskUserArgs("Details", List.of(
-                new AskFieldArg(null, "Product name", "text", null, null, null)), null, null));
+                new AskFieldArg(null, "Product name", "text", null, null, null, null)), null, null));
 
         assertThat(fields.get(0)).containsEntry("name", "Product name");
+    }
+
+    /**
+     * Options are usually the model guessing at a merchant's catalogue, so a choice is open
+     * unless it was closed on purpose. Being held to a wrong guess is worse than being
+     * offered a right one.
+     */
+    @Test
+    void aChoiceIsOpenUnlessTheAgentDeliberatelyClosedIt() {
+        var fields = fieldsOf(new AskUserArgs("Details", List.of(
+                new AskFieldArg("size", "Size", "choice", List.of("S", "M"), null, null, null),
+                new AskFieldArg("colour", "Colour", "choice", List.of("Navy"), null, null, true)),
+                null, null));
+
+        assertThat(fields.get(0)).containsEntry("allowFreeText", true);
+        assertThat(fields.get(1)).containsEntry("allowFreeText", true);
+    }
+
+    /** For a set that really is closed — a status enum, not a guess at what someone stocks. */
+    @Test
+    void aStructuredChoiceCanBeClosed() {
+        var fields = fieldsOf(new AskUserArgs("Details", List.of(
+                new AskFieldArg("status", "Status", "choice", List.of("ACTIVE", "DRAFT"),
+                        null, null, false)), null, null));
+
+        assertThat(fields.get(0)).containsEntry("allowFreeText", false);
     }
 
     /** Everything here ends the run rather than blocking a worker on a human. */

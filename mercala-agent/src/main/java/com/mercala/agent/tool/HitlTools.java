@@ -106,9 +106,11 @@ public class HitlTools {
         out.put("options", arg.options() == null ? List.of() : arg.options());
         out.put("placeholder", nullSafe(arg.placeholder()));
         out.put("optional", Boolean.TRUE.equals(arg.optional()));
-        // A choice always accepts something off the list. The merchant knows their catalogue
-        // better than the model guessing at its options does.
-        out.put("allowFreeText", true);
+        // Open unless the model closed it deliberately. The default matters: options are
+        // usually the model guessing at the merchant's catalogue, and being held to a wrong
+        // guess is worse than being offered a right one. Closing it is for the cases where
+        // the set really is closed — a status enum, not a guess at what sizes a shirt comes in.
+        out.put("allowFreeText", !Boolean.FALSE.equals(arg.allowFreeText()));
         return out;
     }
 

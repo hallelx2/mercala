@@ -108,6 +108,10 @@ public final class ToolPayloads {
      * @param placeholder an example, not a default — nothing is pre-filled from it
      * @param optional    true when the answer can be skipped. Default is required, because a
      *                    model asking for something it does not need is the cheaper mistake
+     * @param allowFreeText false to hold the merchant to {@code options}. Defaults to true,
+     *                    and should stay true unless the set is genuinely closed — a status
+     *                    enum, not a guess at what sizes a shirt comes in. The merchant knows
+     *                    their catalogue; the model does not
      */
     public record AskFieldArg(
             String name,
@@ -115,7 +119,8 @@ public final class ToolPayloads {
             String type,
             List<String> options,
             String placeholder,
-            Boolean optional
+            Boolean optional,
+            Boolean allowFreeText
     ) {}
 
     public record ConfirmActionArgs(
