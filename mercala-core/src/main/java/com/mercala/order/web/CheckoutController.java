@@ -1,8 +1,5 @@
 package com.mercala.order.web;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mercala.order.Order;
 import com.mercala.order.CheckoutService;
 import com.mercala.order.web.dto.CheckoutRequest;
-import com.mercala.order.web.dto.OrderLineResponse;
 import com.mercala.order.web.dto.OrderResponse;
 import com.mercala.platform.security.AuthenticatedUser;
 
@@ -24,9 +20,11 @@ import com.mercala.platform.security.AuthenticatedUser;
 public class CheckoutController {
 
     private final CheckoutService checkoutService;
+    private final OrderAssembler assembler;
 
-    public CheckoutController(CheckoutService checkoutService) {
+    public CheckoutController(CheckoutService checkoutService, OrderAssembler assembler) {
         this.checkoutService = checkoutService;
+        this.assembler = assembler;
     }
 
     @PostMapping
@@ -57,23 +55,6 @@ public class CheckoutController {
     }
 
     private OrderResponse mapToResponse(Order order) {
-        List<OrderLineResponse> lines = order.getLines().stream()
-                .map(line -> new OrderLineResponse(
-                        line.getId(),
-                        line.getVariantId(),
-                        line.getQuantity(),
-                        line.getUnitPrice()
-                ))
-                .collect(Collectors.toList());
-
-        return new OrderResponse(
-                order.getId(),
-                order.getUserId(),
-                order.getStatus(),
-                order.getTotalAmount(),
-                order.getIdempotencyKey(),
-                lines,
-                order.getCreatedAt()
-        );
+        return assembler.assemble(order);
     }
 }

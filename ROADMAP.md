@@ -236,8 +236,18 @@ cannot drift, the ergonomics stay ours.
       with the photograph; product pages get a gallery; a product without imagery gets a
       typographic tile rather than a broken frame, and so does one whose signature has
       expired. The merchant's own catalogue had the same blind spot and gets the same fix.
-- [ ] Cart → checkout → payment UI, order confirmation and history *(HAL-174)* — needs a
-      public buying path (guest or shopper accounts); storefront is browse-only until then
+- [x] **A stranger can buy something** *(HAL-553)* — `POST /api/auth/guest` mints a session
+      from a store slug alone, so cart and checkout stay `isAuthenticated()` rather than
+      growing a second anonymous path through stock and money. Cart and order lines now
+      carry the product's name, SKU, price and picture — a bag that showed variant UUIDs
+      was not a bag — resolved in two batched queries per page rather than one per line.
+      Storefront gets a buy control, a bag, and an order confirmation with its own URL.
+      Tenant isolation is tested from the cheapest credential in the system: a guest of one
+      store cannot add another store's variant or read its orders.
+- [ ] Payment initiation *(HAL-593)* — nothing in the codebase asks a `PaymentProvider` to
+      charge anyone; adapters and the inbound webhook exist, the call between them does not
+- [ ] Order history for a shopper, and payment UI *(HAL-174)* — a guest's receipt has a URL
+      but nothing lists their past orders
 
 ## Launch & GTM *(gated on Mercala Web — target 2026-10-15)*
 

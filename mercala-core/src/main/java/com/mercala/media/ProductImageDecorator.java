@@ -93,6 +93,28 @@ public class ProductImageDecorator {
                 .toList();
     }
 
+    /**
+     * The newest picture per product, signed and ready to load.
+     *
+     * <p>For surfaces that show a line rather than a product — a cart, an order — where one
+     * thumbnail is the whole of the imagery and a gallery would be noise.
+     *
+     * @return a signed URL per product id, omitting products with no image and images that
+     *         could not be signed
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> primaryImageUrls(Collection<UUID> productIds) {
+        Map<UUID, String> primary = new java.util.HashMap<>();
+        imagesFor(productIds).forEach((productId, views) -> {
+            // imagesFor is ordered newest first, so the head is the primary.
+            String viewUrl = views.isEmpty() ? null : views.get(0).viewUrl();
+            if (viewUrl != null) {
+                primary.put(productId, viewUrl);
+            }
+        });
+        return primary;
+    }
+
     private Map<UUID, List<ProductImageView>> imagesFor(Collection<UUID> productIds) {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null || productIds.isEmpty()) {

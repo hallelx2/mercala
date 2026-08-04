@@ -1,8 +1,6 @@
 package com.mercala.cart.web;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mercala.cart.Cart;
 import com.mercala.cart.CartService;
 import com.mercala.cart.web.dto.AddCartItemRequest;
-import com.mercala.cart.web.dto.CartLineResponse;
 import com.mercala.cart.web.dto.CartResponse;
 import com.mercala.cart.web.dto.UpdateCartItemRequest;
 import com.mercala.platform.security.AuthenticatedUser;
@@ -30,9 +27,11 @@ import com.mercala.platform.security.AuthenticatedUser;
 public class CartController {
 
     private final CartService cartService;
+    private final CartAssembler assembler;
 
-    public CartController(CartService cartService) {
+    public CartController(CartService cartService, CartAssembler assembler) {
         this.cartService = cartService;
+        this.assembler = assembler;
     }
 
     @GetMapping
@@ -69,10 +68,6 @@ public class CartController {
     }
 
     private CartResponse mapToResponse(Cart cart) {
-        List<CartLineResponse> lines = cart.getLines().stream()
-                .map(line -> new CartLineResponse(line.getId(), line.getVariantId(), line.getQuantity()))
-                .collect(Collectors.toList());
-
-        return new CartResponse(cart.getId(), cart.getUserId(), lines);
+        return assembler.assemble(cart);
     }
 }

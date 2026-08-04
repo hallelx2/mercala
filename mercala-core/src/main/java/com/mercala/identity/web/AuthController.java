@@ -27,12 +27,15 @@ public class AuthController {
     private final com.mercala.identity.StoreMembershipRepository membershipRepository;
     private final com.mercala.identity.service.RegistrationService registrationService;
     private final com.mercala.platform.security.JwtService jwtService;
+    private final com.mercala.identity.service.GuestSessionService guestSessionService;
 
     public AuthController(AuthService authService, TenantRepository tenantRepository,
                           com.mercala.identity.AppUserRepository userRepository,
                           com.mercala.identity.StoreMembershipRepository membershipRepository,
                           com.mercala.identity.service.RegistrationService registrationService,
-                          com.mercala.platform.security.JwtService jwtService) {
+                          com.mercala.platform.security.JwtService jwtService,
+                          com.mercala.identity.service.GuestSessionService guestSessionService) {
+        this.guestSessionService = guestSessionService;
         this.authService = authService;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
@@ -52,6 +55,27 @@ public class AuthController {
     public LoginResponse register(@Valid @RequestBody com.mercala.identity.web.dto.RegisterRequest request) {
         var user = registrationService.register(request);
         return new LoginResponse(jwtService.issue(user), "Bearer", jwtService.getExpirationSeconds());
+    }
+
+    /**
+     * Public: a session for a shopper who has not signed up for anything.
+     *
+     * <p>Under {@code /api/auth} rather than {@code /api/public/stores/{slug}} because it
+     * mints a token, and because the public storefront rules permit {@code GET} only —
+     * "nothing under /api/public may ever mutate" is an invariant worth keeping rather
+     * than an inconvenience to route around.
+     *
+     * <p>The store slug is the whole input: with no account to look a tenant up from, the
+     * storefront the shopper is standing in is what scopes the session. An unknown slug is
+     * a 404, same as browsing one.
+     */
+    @SecurityRequirements
+    @PostMapping("/guest")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.CREATED)
+    public LoginResponse guest(
+            @Valid @RequestBody com.mercala.identity.web.dto.GuestSessionRequest request) {
+        var guest = guestSessionService.createFor(request.storeSlug());
+        return new LoginResponse(jwtService.issue(guest), "Bearer", jwtService.getExpirationSeconds());
     }
 
     /**
