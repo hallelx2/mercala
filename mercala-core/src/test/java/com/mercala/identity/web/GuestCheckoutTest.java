@@ -99,6 +99,13 @@ class GuestCheckoutTest extends AbstractIntegrationTest {
         return variantId;
     }
 
+    /**
+     * Note what {@code PLACED} does and does not mean here: the order exists and stock is
+     * spoken for, but nothing was charged, because no code path in the system asks a
+     * {@code PaymentProvider} to charge anyone (HAL-593). This test asserts the ordering
+     * path only — it is not evidence that payment works, and there is no failed-payment
+     * case to write until there is a payment call to fail.
+     */
     @Test
     void aGuestCanFillACartAndPlaceAnOrder() throws Exception {
         Tenant tenant = store("linen");
