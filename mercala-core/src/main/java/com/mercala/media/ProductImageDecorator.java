@@ -93,7 +93,46 @@ public class ProductImageDecorator {
                 .toList();
     }
 
+    /**
+     * The newest picture per product, signed and ready to load.
+     *
+     * <p>For surfaces that show a line rather than a product — a cart, an order — where one
+     * thumbnail is the whole of the imagery and a gallery would be noise.
+     *
+     * <p>Groups before it signs. Signing the whole group and keeping the head would presign
+     * every photograph of a product to render one thumbnail, which on a bag of well-shot
+     * items is most of the work thrown away.
+     *
+     * @return a signed URL per product id, omitting products with no image and images that
+     *         could not be signed
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> primaryImageUrls(Collection<UUID> productIds) {
+        Map<UUID, String> primary = new java.util.HashMap<>();
+        rowsFor(productIds).forEach((productId, rows) -> {
+            // Ordered newest first by the query, so the head is the primary.
+            String viewUrl = toView(rows.get(0)).viewUrl();
+            if (viewUrl != null) {
+                primary.put(productId, viewUrl);
+            }
+        });
+        return primary;
+    }
+
     private Map<UUID, List<ProductImageView>> imagesFor(Collection<UUID> productIds) {
+        return rowsFor(productIds).entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().stream().map(this::toView).toList()));
+    }
+
+    /**
+     * The rows themselves, grouped and unsigned — one query for the whole page.
+     *
+     * <p>Callers sign what they are going to show, which is the only reason this is separate
+     * from {@link #imagesFor}: a gallery needs every row signed, a thumbnail needs one.
+     */
+    private Map<UUID, List<ProductImage>> rowsFor(Collection<UUID> productIds) {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null || productIds.isEmpty()) {
             return Map.of();
@@ -102,9 +141,7 @@ public class ProductImageDecorator {
         return productImages
                 .findByTenantIdAndProductIdInOrderByCreatedAtDescIdDesc(tenantId, productIds)
                 .stream()
-                .collect(Collectors.groupingBy(
-                        ProductImage::getProductId,
-                        Collectors.mapping(this::toView, Collectors.toList())));
+                .collect(Collectors.groupingBy(ProductImage::getProductId));
     }
 
     /**

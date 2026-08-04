@@ -1,8 +1,6 @@
 package com.mercala.order.web;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,10 +16,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.mercala.order.Order;
 import com.mercala.order.OrderQueryService;
 import com.mercala.order.OrderStatus;
-import com.mercala.order.web.dto.OrderLineResponse;
 import com.mercala.order.web.dto.OrderResponse;
 import com.mercala.platform.security.AuthenticatedUser;
 
@@ -44,9 +40,11 @@ import com.mercala.platform.security.AuthenticatedUser;
 public class OrderController {
 
     private final OrderQueryService orderQueryService;
+    private final OrderAssembler assembler;
 
-    public OrderController(OrderQueryService orderQueryService) {
+    public OrderController(OrderQueryService orderQueryService, OrderAssembler assembler) {
         this.orderQueryService = orderQueryService;
+        this.assembler = assembler;
     }
 
     /**
@@ -59,9 +57,10 @@ public class OrderController {
             @RequestParam(required = false) OrderStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        return orderQueryService
-                .findVisible(user.userId(), user.role(), status, pageable)
-                .map(OrderController::mapToResponse);
+        // Assembled as a page, not row by row: a page of orders resolves its variants and
+        // imagery in two queries either way.
+        return assembler.assemble(
+                orderQueryService.findVisible(user.userId(), user.role(), status, pageable));
     }
 
     /**
@@ -75,26 +74,8 @@ public class OrderController {
             @PathVariable UUID id) {
 
         return orderQueryService.findVisibleById(id, user.userId(), user.role())
-                .map(OrderController::mapToResponse)
+                .map(assembler::assemble)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found"));
     }
 
-    private static OrderResponse mapToResponse(Order order) {
-        List<OrderLineResponse> lines = order.getLines().stream()
-                .map(line -> new OrderLineResponse(
-                        line.getId(),
-                        line.getVariantId(),
-                        line.getQuantity(),
-                        line.getUnitPrice()))
-                .collect(Collectors.toList());
-
-        return new OrderResponse(
-                order.getId(),
-                order.getUserId(),
-                order.getStatus(),
-                order.getTotalAmount(),
-                order.getIdempotencyKey(),
-                lines,
-                order.getCreatedAt());
-    }
 }

@@ -48,6 +48,11 @@ public class SecurityConfig {
                         .requestMatchers("/docs", "/api/v1/docs", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll() // self-serve signup (HAL-552)
+                        // A shopper who has not signed up for anything. Mints a session
+                        // scoped to one storefront so cart and checkout — which are, and
+                        // stay, authenticated — work without a second anonymous code path
+                        // through stock and money (HAL-553).
+                        .requestMatchers(HttpMethod.POST, "/api/auth/guest").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/tenants").permitAll()   // public store signup
                         // The storefront: anonymous shoppers browsing a store. GET-only on
                         // purpose — nothing under /api/public may ever mutate.
