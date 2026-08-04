@@ -3,6 +3,7 @@ package com.mercala.agent.tool;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.slf4j.Logger;
@@ -51,19 +52,79 @@ public class HitlTools {
                     + "Reply with one short sentence acknowledging that you are waiting.";
 
     @Bean
-    @Description("Asks the merchant a question and shows them the answer options as buttons. "
-            + "Use this whenever a detail you need is missing or ambiguous — sizes, colours, price, "
-            + "which product was meant — instead of guessing. The merchant's answer arrives as a tool "
+    @Description("Asks the merchant for everything you still need, as a form they fill in. "
+            + "Put EVERY missing detail in the `fields` list of a SINGLE call — never ask one thing, "
+            + "and never write questions as prose, because prose is not something the merchant can "
+            + "fill in. Each field has a name, a label, and a type: text, textarea, number, money, "
+            + "choice (supply `options`) or image (the merchant uploads a photo). Mark a field "
+            + "optional when you can proceed without it. The merchant's answers arrive as a tool "
             + "result on the next turn.")
     public Function<AskUserArgs, Map<String, Object>> askUser() {
         return args -> ToolActivity.observe("askUser", args, () -> {
-            log.info("Tool: askUser invoked — question='{}', options={}", args.question(),
-                    args.options() == null ? 0 : args.options().size());
+            List<Map<String, Object>> fields = normalise(args);
+            log.info("Tool: askUser invoked — question='{}', fields={}", args.question(), fields.size());
             return awaiting("question", Map.of(
                     "question", nullSafe(args.question()),
-                    "options", args.options() == null ? List.of() : args.options(),
-                    "allowFreeText", args.allowFreeText() == null || args.allowFreeText()));
+                    "fields", fields));
         });
+    }
+
+    /**
+     * One shape for the client, whichever shape the model sent.
+     *
+     * <p>Models reach for the simplest schema that looks like it will work, so a single
+     * question with a list of options keeps arriving even when the richer one is documented.
+     * Normalising here means the card renders a form either way, rather than the client
+     * carrying two code paths for what is the same question with one field in it.
+     */
+    private static List<Map<String, Object>> normalise(AskUserArgs args) {
+        if (args.fields() != null && !args.fields().isEmpty()) {
+            return args.fields().stream().map(HitlTools::field).toList();
+        }
+
+        // The single-question shape: the question is the field, and its options are the
+        // choices. allowFreeText=false is the only way to say "one of these, nothing else".
+        boolean freeText = args.allowFreeText() == null || args.allowFreeText();
+        List<String> options = args.options() == null ? List.of() : args.options();
+        Map<String, Object> only = new LinkedHashMap<>();
+        only.put("name", "answer");
+        only.put("label", nullSafe(args.question()));
+        only.put("type", options.isEmpty() ? "text" : "choice");
+        only.put("options", options);
+        only.put("placeholder", "");
+        only.put("optional", false);
+        only.put("allowFreeText", freeText);
+        return List.of(only);
+    }
+
+    private static Map<String, Object> field(ToolPayloads.AskFieldArg arg) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        String label = nullSafe(arg.label()).isBlank() ? nullSafe(arg.name()) : nullSafe(arg.label());
+        out.put("name", nullSafe(arg.name()).isBlank() ? label : nullSafe(arg.name()));
+        out.put("label", label);
+        out.put("type", type(arg));
+        out.put("options", arg.options() == null ? List.of() : arg.options());
+        out.put("placeholder", nullSafe(arg.placeholder()));
+        out.put("optional", Boolean.TRUE.equals(arg.optional()));
+        // A choice always accepts something off the list. The merchant knows their catalogue
+        // better than the model guessing at its options does.
+        out.put("allowFreeText", true);
+        return out;
+    }
+
+    private static final Set<String> FIELD_TYPES =
+            Set.of("text", "textarea", "number", "money", "choice", "image");
+
+    /**
+     * An unrecognised type becomes a text box rather than an error. The model inventing
+     * {@code "email"} should cost the merchant a plain input, not a broken card.
+     */
+    private static String type(ToolPayloads.AskFieldArg arg) {
+        String declared = arg.type() == null ? "" : arg.type().trim().toLowerCase(java.util.Locale.ROOT);
+        if (FIELD_TYPES.contains(declared)) {
+            return declared;
+        }
+        return arg.options() != null && !arg.options().isEmpty() ? "choice" : "text";
     }
 
     @Bean

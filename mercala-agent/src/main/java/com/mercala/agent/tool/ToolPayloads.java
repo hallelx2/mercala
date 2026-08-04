@@ -80,10 +80,42 @@ public final class ToolPayloads {
 
     // ── Human-in-the-loop ──────────────────────────────────────────
 
+    /**
+     * @param question the preamble — why this is being asked, in one sentence
+     * @param fields   everything needed, asked at once. A model that can only ask one thing
+     *                 per call will write the rest as prose instead, and prose is not a
+     *                 control the merchant can fill in
+     * @param options  the older single-question shape: choices for {@code question} itself.
+     *                 Kept because models reach for the simpler schema, and normalised into
+     *                 {@code fields} server-side so the client sees one shape
+     */
     public record AskUserArgs(
             String question,
+            List<AskFieldArg> fields,
             List<String> options,
             Boolean allowFreeText
+    ) {}
+
+    /**
+     * One thing being asked for.
+     *
+     * @param name        the key the answer comes back under
+     * @param label       what the merchant reads
+     * @param type        {@code text}, {@code textarea}, {@code number}, {@code money},
+     *                    {@code choice} or {@code image}
+     * @param options     the choices, for {@code choice}. The merchant may always answer
+     *                    with something not on the list
+     * @param placeholder an example, not a default — nothing is pre-filled from it
+     * @param optional    true when the answer can be skipped. Default is required, because a
+     *                    model asking for something it does not need is the cheaper mistake
+     */
+    public record AskFieldArg(
+            String name,
+            String label,
+            String type,
+            List<String> options,
+            String placeholder,
+            Boolean optional
     ) {}
 
     public record ConfirmActionArgs(
