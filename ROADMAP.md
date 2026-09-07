@@ -247,9 +247,13 @@ cannot drift, the ergonomics stay ours.
       orders. **Not production-ready as a buying path:** checkout reaches `PLACED` and
       reserves stock without a payment ever being attempted, so an anonymous caller can
       consume a merchant's availability for free. Closing HAL-553 needs HAL-593 below.
-- [ ] **Payment initiation** *(HAL-593)* — nothing in the codebase asks a `PaymentProvider`
-      to charge anyone; the adapters and the inbound webhook exist, the call between them
-      was never written. Until it is, `PLACED` means "ordered", not "paid"
+- [x] **Payment initiation** *(HAL-593)* — `PaymentInitiationService` closes the gap between
+      checkout and the providers. The controller places the order, commits, and then routes and
+      initiates outside that transaction, so the outbound call to Stripe or Paystack never sits
+      inside the transaction holding the order and stock rows. Idempotent on `orderId`, so a
+      retried checkout does not charge twice, and a provider failure records a FAILED attempt
+      rather than throwing, because a placed order must not be lost to somebody else's outage.
+      `POST /api/checkout` now returns `{order, payment}` with the checkout URL
 - [ ] Order history for a shopper, and payment UI *(HAL-174)* — a guest's receipt has a URL
       but nothing lists their past orders
 

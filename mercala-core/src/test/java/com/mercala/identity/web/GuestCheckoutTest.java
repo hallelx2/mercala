@@ -127,8 +127,10 @@ class GuestCheckoutTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotencyKey\":\"" + UUID.randomUUID() + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PLACED"))
-                .andExpect(jsonPath("$.totalAmount").value(98.00));
+                .andExpect(jsonPath("$.order.status").value("PLACED"))
+                .andExpect(jsonPath("$.order.totalAmount").value(98.00))
+                // A guest checkout starts a payment like any other (HAL-593).
+                .andExpect(jsonPath("$.payment").exists());
     }
 
     /**
@@ -210,7 +212,7 @@ class GuestCheckoutTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
-        mockMvc.perform(get("/api/orders/" + JsonPath.read(order, "$.id").toString())
+        mockMvc.perform(get("/api/orders/" + JsonPath.read(order, "$.order.id").toString())
                         .header("Authorization", guest))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PLACED"))
@@ -284,7 +286,7 @@ class GuestCheckoutTest extends AbstractIntegrationTest {
 
         String nosy = guestToken(store("nosy").getSlug());
 
-        mockMvc.perform(get("/api/orders/" + JsonPath.read(order, "$.id").toString())
+        mockMvc.perform(get("/api/orders/" + JsonPath.read(order, "$.order.id").toString())
                         .header("Authorization", nosy))
                 .andExpect(status().isNotFound());
     }

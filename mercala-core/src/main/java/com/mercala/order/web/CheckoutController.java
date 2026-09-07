@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mercala.order.Order;
 import com.mercala.order.CheckoutService;
 import com.mercala.order.web.dto.CheckoutRequest;
+import com.mercala.order.web.dto.CheckoutResponse;
 import com.mercala.order.web.dto.OrderResponse;
+import com.mercala.payment.PaymentInitiationService;
 import com.mercala.platform.security.AuthenticatedUser;
 
 @RestController
@@ -21,14 +23,19 @@ public class CheckoutController {
 
     private final CheckoutService checkoutService;
     private final OrderAssembler assembler;
+    private final PaymentInitiationService paymentInitiationService;
 
-    public CheckoutController(CheckoutService checkoutService, OrderAssembler assembler) {
+    public CheckoutController(
+            CheckoutService checkoutService,
+            OrderAssembler assembler,
+            PaymentInitiationService paymentInitiationService) {
         this.checkoutService = checkoutService;
         this.assembler = assembler;
+        this.paymentInitiationService = paymentInitiationService;
     }
 
     @PostMapping
-    public OrderResponse checkout(
+    public CheckoutResponse checkout(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestHeader(value = "Idempotency-Key", required = false) String headerIdempotencyKey,
             @RequestBody(required = false) CheckoutRequest request) {
@@ -51,7 +58,25 @@ public class CheckoutController {
                 throw e;
             }
         }
-        return mapToResponse(order);
+        // Order is committed and stock is reserved before we talk to a provider. The HTTP call
+        // out to Stripe or Paystack must not sit inside the checkout transaction.
+        var initiation = paymentInitiationService.initiateForOrder(
+                order.getTenantId(),
+                order.getId(),
+                order.getTotalAmount(),
+                key,
+                request == null ? null : request.preferredProvider());
+
+        return new CheckoutResponse(mapToResponse(order), toPaymentInfo(initiation));
+    }
+
+    private CheckoutResponse.PaymentInfo toPaymentInfo(PaymentInitiationService.Initiation initiation) {
+        if (initiation == null) {
+            return null;
+        }
+        var r = initiation.response();
+        return new CheckoutResponse.PaymentInfo(
+                initiation.provider(), r.status(), r.checkoutUrl(), r.providerReference());
     }
 
     private OrderResponse mapToResponse(Order order) {

@@ -108,24 +108,27 @@ class CheckoutControllerTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(checkoutJson))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PLACED"))
-                .andExpect(jsonPath("$.totalAmount").value(199.98))
-                .andExpect(jsonPath("$.idempotencyKey").value(idempotencyKey))
-                .andExpect(jsonPath("$.lines[0].variantId").value(variant.getId().toString()))
-                .andExpect(jsonPath("$.lines[0].quantity").value(2))
-                .andExpect(jsonPath("$.lines[0].unitPrice").value(99.99))
+                .andExpect(jsonPath("$.order.status").value("PLACED"))
+                .andExpect(jsonPath("$.order.totalAmount").value(199.98))
+                .andExpect(jsonPath("$.order.idempotencyKey").value(idempotencyKey))
+                .andExpect(jsonPath("$.order.lines[0].variantId").value(variant.getId().toString()))
+                .andExpect(jsonPath("$.order.lines[0].quantity").value(2))
+                .andExpect(jsonPath("$.order.lines[0].unitPrice").value(99.99))
+                // Checkout now also starts a payment; the attempt is reported inline so the
+                // client knows where to send the shopper (HAL-593).
+                .andExpect(jsonPath("$.payment").exists())
                 // The client that just placed this should not have to re-fetch to learn
                 // when it happened (HAL-575).
-                .andExpect(jsonPath("$.createdAt").exists())
+                .andExpect(jsonPath("$.order.createdAt").exists())
                 .andReturn().getResponse().getContentAsString();
 
-        UUID orderId = UUID.fromString(com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.id"));
+        UUID orderId = UUID.fromString(com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.order.id"));
 
         // Reading it back carries the same timestamp, asserted as equality rather than as
         // presence: three code paths build this response, and three different-but-present
         // timestamps would satisfy an existence check while making the dashboard's chart
         // disagree with its own order list.
-        String placedAt = com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.createdAt");
+        String placedAt = com.jayway.jsonpath.JsonPath.read(orderResponseStr, "$.order.createdAt");
 
         mockMvc.perform(get("/api/orders/" + orderId)
                         .header("Authorization", shopperToken))
@@ -160,8 +163,8 @@ class CheckoutControllerTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(checkoutJson))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(orderId.toString()))
-                .andExpect(jsonPath("$.idempotencyKey").value(idempotencyKey));
+                .andExpect(jsonPath("$.order.id").value(orderId.toString()))
+                .andExpect(jsonPath("$.order.idempotencyKey").value(idempotencyKey));
 
         // 7. Verify stock levels did not change after duplicate checkout
         TenantContext.setCurrentTenant(tenant.getId());
@@ -257,6 +260,6 @@ class CheckoutControllerTest extends AbstractIntegrationTest {
                                 {"idempotencyKey":"shared-idempotency-key"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.lines[0].variantId").value(variantB.getId().toString()));
+                .andExpect(jsonPath("$.order.lines[0].variantId").value(variantB.getId().toString()));
     }
 }
