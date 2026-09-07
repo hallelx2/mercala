@@ -28,7 +28,22 @@ public class PaymentRoutingService {
         this.providerRefRepository = providerRefRepository;
     }
 
-    public PaymentProvider getProvider(String preferredProviderName) {
+    /**
+     * A resolved provider and the canonical name it was resolved under.
+     *
+     * <p>{@link Payment} persists the provider name, and the webhook matches on it, so the
+     * caller needs the name the routing decision actually landed on rather than guessing it
+     * back out of the bean.
+     */
+    public record RoutedProvider(String name, PaymentProvider provider) {}
+
+    /**
+     * Resolve a provider and report which one it was.
+     *
+     * <p>{@link #getProvider(String)} delegates here and drops the name, so existing callers
+     * are unaffected.
+     */
+    public RoutedProvider route(String preferredProviderName) {
         UUID tenantId = TenantContext.getCurrentTenant();
         if (tenantId == null) {
             throw new IllegalStateException("Tenant context is required to route payment");
@@ -41,7 +56,7 @@ public class PaymentRoutingService {
                 PaymentProvider provider = getProviderBean(cleanName);
                 if (provider != null) {
                     log.info("Routed payment to explicitly requested provider: {} for tenant: {}", cleanName, tenantId);
-                    return provider;
+                    return new RoutedProvider(cleanName, provider);
                 }
             }
         }
@@ -52,7 +67,7 @@ public class PaymentRoutingService {
                 PaymentProvider provider = getProviderBean(providerName);
                 if (provider != null) {
                     log.info("Routed payment to configured tenant provider: {} for tenant: {}", providerName, tenantId);
-                    return provider;
+                    return new RoutedProvider(providerName, provider);
                 }
             }
         }
@@ -65,11 +80,15 @@ public class PaymentRoutingService {
         PaymentProvider provider = getProviderBean(routedProviderName);
         if (provider != null) {
             log.info("Routed payment to region-default provider: {} based on region: {} for tenant: {}", routedProviderName, region, tenantId);
-            return provider;
+            return new RoutedProvider(routedProviderName, provider);
         }
 
         log.warn("Failed to find provider: {}. Falling back to default stripePaymentProvider.", routedProviderName);
-        return providers.get("stripePaymentProvider");
+        return new RoutedProvider("STRIPE", providers.get("stripePaymentProvider"));
+    }
+
+    public PaymentProvider getProvider(String preferredProviderName) {
+        return route(preferredProviderName).provider();
     }
 
     private String selectProviderForRegion(String region) {
