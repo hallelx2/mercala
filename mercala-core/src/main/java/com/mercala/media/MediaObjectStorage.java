@@ -50,6 +50,7 @@ public class MediaObjectStorage {
     private final String sessionToken;
     private final String region;
     private final String bucket;
+    private final String publicBucket;
 
     private MinioClient minioClient;
 
@@ -59,13 +60,15 @@ public class MediaObjectStorage {
             @Value("${mercala.storage.secret-key:}") String secretKey,
             @Value("${mercala.storage.session-token:}") String sessionToken,
             @Value("${mercala.storage.region:}") String region,
-            @Value("${mercala.storage.bucket:mercala-images}") String bucket) {
+            @Value("${mercala.storage.bucket:mercala-images}") String bucket,
+            @Value("${mercala.storage.public-bucket:mercala-public-images}") String publicBucket) {
         this.endpoint = endpoint;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
         this.sessionToken = sessionToken;
         this.region = region;
         this.bucket = bucket;
+        this.publicBucket = publicBucket;
     }
 
     /**
@@ -135,6 +138,23 @@ public class MediaObjectStorage {
      * <p>The same parsing exists in {@code mercala-image-gen}'s {@code ObjectRef}; both
      * disappear when the storage client is extracted (HAL-567).
      */
+    /**
+     * Whether this URL is an object anyone can already read.
+     *
+     * <p>image-gen writes finished product imagery to the public bucket, which exists so
+     * that a shopper's browser can load it straight from an {@code <img>} tag. Such a URL
+     * needs no signature, and cannot be given one here: signing is scoped to the private
+     * uploads bucket, so asking cost the picture entirely — the object was public, the
+     * view URL came back null, and every client dropped the image as unloadable.
+     */
+    public boolean isPubliclyReadable(String url) {
+        if (url == null || url.isBlank() || publicBucket == null || publicBucket.isBlank()) {
+            return false;
+        }
+        String prefix = trimSlash(endpoint) + "/" + publicBucket + "/";
+        return url.trim().toLowerCase(Locale.ROOT).startsWith(prefix.toLowerCase(Locale.ROOT));
+    }
+
     public String objectKeyOf(String url) {
         if (url == null || url.isBlank()) {
             throw new IllegalArgumentException("An image reference is required");

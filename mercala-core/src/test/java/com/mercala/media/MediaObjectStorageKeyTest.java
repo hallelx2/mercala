@@ -17,9 +17,10 @@ class MediaObjectStorageKeyTest {
 
     private static final String ENDPOINT = "http://localhost:9000";
     private static final String BUCKET = "mercala-images";
+    private static final String PUBLIC_BUCKET = "mercala-public-images";
 
     private static MediaObjectStorage storage() {
-        return new MediaObjectStorage(ENDPOINT, "minioadmin", "minioadmin", "", "", BUCKET);
+        return new MediaObjectStorage(ENDPOINT, "minioadmin", "minioadmin", "", "", BUCKET, PUBLIC_BUCKET);
     }
 
     @Test
@@ -54,5 +55,27 @@ class MediaObjectStorageKeyTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> storage().objectKeyOf("  "))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * A generated image is already loadable, and recognising that is what puts it on the
+     * page: asked to sign it, the signer refuses, the view URL comes back null, and every
+     * client treats the picture as one that does not exist.
+     */
+    @Test
+    void anObjectInThePublicBucketIsRecognisedAsAlreadyReadable() {
+        assertThat(storage().isPubliclyReadable(ENDPOINT + "/" + PUBLIC_BUCKET + "/tenant-1/product.jpg"))
+                .isTrue();
+    }
+
+    @Test
+    void anUploadIsNotPubliclyReadable() {
+        assertThat(storage().isPubliclyReadable(ENDPOINT + "/" + BUCKET + "/tenant-1/uploads/photo.png"))
+                .isFalse();
+    }
+
+    @Test
+    void aUrlFromAnotherHostIsNotPubliclyReadable() {
+        assertThat(storage().isPubliclyReadable("https://evil.example/" + PUBLIC_BUCKET + "/x.jpg")).isFalse();
     }
 }

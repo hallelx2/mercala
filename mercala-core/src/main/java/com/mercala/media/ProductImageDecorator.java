@@ -150,6 +150,11 @@ public class ProductImageDecorator {
      * unreachable should cost a shopper the picture, not the page it is on.
      */
     private ProductImageView toView(ProductImage image) {
+        // Already public: the URL is the view. Generated and retouched imagery lands in
+        // the public bucket, and running it through the signer only fails.
+        if (storage.isPubliclyReadable(image.getUrl())) {
+            return new ProductImageView(image.getUrl(), image.getUrl());
+        }
         try {
             return new ProductImageView(
                     image.getUrl(), storage.presignedView(storage.objectKeyOf(image.getUrl()), viewTtl));
