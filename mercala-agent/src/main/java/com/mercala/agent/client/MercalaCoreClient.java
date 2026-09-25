@@ -58,9 +58,33 @@ public class MercalaCoreClient {
         return restTemplate.postForObject(url, entity, Map.class);
     }
 
+    /**
+     * The merchant's categories. Used to turn a category the model named — "Apparel" —
+     * into the id the catalog API actually takes, which is the only form it accepts.
+     */
+    @SuppressWarnings("unchecked")
+    public java.util.List<Map<String, Object>> listCategories() {
+        String url = coreBaseUrl + "/api/categories";
+        HttpEntity<Void> entity = new HttpEntity<>(buildHeaders());
+        java.util.List<Map<String, Object>> body =
+                restTemplate.exchange(url, HttpMethod.GET, entity, java.util.List.class).getBody();
+        return body == null ? java.util.List.of() : body;
+    }
+
     @SuppressWarnings("unchecked")
     public Map<String, Object> getProduct(UUID productId) {
         String url = coreBaseUrl + "/api/products/" + productId;
+        HttpEntity<Void> entity = new HttpEntity<>(buildHeaders());
+        return restTemplate.exchange(url, HttpMethod.GET, entity, Map.class).getBody();
+    }
+
+    /**
+     * The catalogue itself, newest page first. Search needs something to search for;
+     * "what am I selling?" is a question with no query in it.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> listProducts(int page, int size) {
+        String url = String.format("%s/api/products?page=%d&size=%d", coreBaseUrl, page, size);
         HttpEntity<Void> entity = new HttpEntity<>(buildHeaders());
         return restTemplate.exchange(url, HttpMethod.GET, entity, Map.class).getBody();
     }

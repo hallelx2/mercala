@@ -69,7 +69,7 @@ public class ShopperAgentService {
     /**
      * Shopper only gets read-only tools — no createProduct or updateInventory.
      */
-    private static final Set<String> SHOPPER_TOOLS = Set.of(
+    static final Set<String> SHOPPER_TOOLS = Set.of(
             "searchCatalog", "getProduct"
     );
 

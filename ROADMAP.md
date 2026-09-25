@@ -226,6 +226,14 @@ cannot drift, the ergonomics stay ours.
       `POST /api/auth/switch-store`, `/me.stores[]`; sidebar switcher, Stores page and
       new-store flow landing in the chat to add products
 
+- [x] **The flow works end to end, proven by running it** *(HAL-1551, HAL-1553, HAL-1554,
+      HAL-1555, HAL-1556, HAL-1558, HAL-1559, HAL-1560, HAL-1561)* — driving the real
+      product from a clean machine found that the local stack could not start, a fresh
+      database could not be bootstrapped, nobody could sign up, no shopper could get a bag,
+      a product made by chat had no variant so it could not be sold, generated imagery
+      reached storage and appeared nowhere, search 500'd on a hyphen, and the agent asked
+      merchants for UUIDs. All fixed and covered; recorded start to finish in 2m13s.
+
 **Milestone 3 — shopper surface** *(target 2026-09-26)*
 - [~] Storefront: chat-first discovery over hybrid search + product pages *(HAL-173)* —
       public API (`/api/public/stores/{slug}` + products/search, ACTIVE-only) and `/s/[slug]`

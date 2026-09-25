@@ -23,6 +23,17 @@ public final class ToolPayloads {
             List<VariantArg> variants
     ) {}
 
+    /** Paging only — the catalogue is whatever this merchant sells. Zero-based. */
+    public record ListProductsArgs(int page, int size) {
+        public ListProductsArgs {
+            if (page < 0) page = 0;
+            if (size <= 0) size = 20;
+        }
+    }
+
+    /** No arguments: the merchant's own categories are the only ones there are. */
+    public record ListCategoriesArgs() {}
+
     public record VariantArg(
             String sku,
             BigDecimal price,

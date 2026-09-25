@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 class AgUiStreamerTest {
 
     private final ChatModel chatModel = Mockito.mock(ChatModel.class);
-    private final AgUiStreamer streamer = new AgUiStreamer(chatModel, Duration.ofSeconds(5));
+    private final AgUiStreamer streamer = new AgUiStreamer(chatModel, Duration.ofSeconds(5), 0, Duration.ofMillis(1));
 
     private final AgentContext context =
             new AgentContext(UUID.randomUUID(), UUID.randomUUID(), "MERCHANT_OWNER");
@@ -153,7 +153,7 @@ class AgUiStreamerTest {
 
     @Test
     void aStalledModelTimesOutIntoARunErrorInsteadOfHangingTheStream() {
-        AgUiStreamer impatient = new AgUiStreamer(chatModel, Duration.ofMillis(150));
+        AgUiStreamer impatient = new AgUiStreamer(chatModel, Duration.ofMillis(150), 0, Duration.ofMillis(1));
         when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.never());
 
         StepVerifier.create(impatient.stream(
@@ -198,5 +198,52 @@ class AgUiStreamerTest {
         run(channel);
 
         assertThat(seen.get()).isSameAs(channel);
+    }
+
+    /**
+     * A connection that never produced a chunk is retried; the merchant's turn should not
+     * die because a far-away provider dropped the handshake.
+     */
+    @Test
+    void aModelCallThatNeverAnsweredIsRetried() {
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        when(chatModel.stream(any(Prompt.class))).thenAnswer(invocation -> {
+            if (attempts.incrementAndGet() == 1) {
+                return Flux.error(new java.io.IOException("connection reset"));
+            }
+            return Flux.just(responseOf("second time lucky"));
+        });
+
+        AgUiStreamer retrying = new AgUiStreamer(chatModel, Duration.ofSeconds(5), 2, Duration.ofMillis(10));
+        List<AgUiEvent> events = retrying
+                .stream(new Prompt("hello"), context, AgentRunChannel.active("run-retry"), "thread-retry", "run-retry")
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertThat(attempts.get()).isEqualTo(2);
+        assertThat(events).anySatisfy(event -> assertThat(event).isInstanceOf(AgUiEvent.RunFinished.class));
+        assertThat(events).noneSatisfy(event -> assertThat(event).isInstanceOf(AgUiEvent.RunError.class));
+    }
+
+    /**
+     * Once the model has started answering it may already have called a tool, so a failure
+     * there ends the turn rather than replaying a product creation.
+     */
+    @Test
+    void aFailureAfterTheFirstChunkIsNotRetried() {
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        when(chatModel.stream(any(Prompt.class))).thenAnswer(invocation -> {
+            attempts.incrementAndGet();
+            return Flux.just(responseOf("started")).concatWith(Flux.error(new java.io.IOException("dropped")));
+        });
+
+        AgUiStreamer retrying = new AgUiStreamer(chatModel, Duration.ofSeconds(5), 2, Duration.ofMillis(10));
+        List<AgUiEvent> events = retrying
+                .stream(new Prompt("hello"), context, AgentRunChannel.active("run-once"), "thread-once", "run-once")
+                .collectList()
+                .block(Duration.ofSeconds(10));
+
+        assertThat(attempts.get()).isEqualTo(1);
+        assertThat(events).anySatisfy(event -> assertThat(event).isInstanceOf(AgUiEvent.RunError.class));
     }
 }

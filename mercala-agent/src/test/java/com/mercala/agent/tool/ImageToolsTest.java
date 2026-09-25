@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import com.mercala.agent.chat.AgentContext;
+import com.mercala.agent.client.MercalaCoreClient;
 import com.mercala.agent.kafka.ImageRequestProducer;
 import com.mercala.agent.tool.ToolPayloads.RequestProductImageArgs;
 
@@ -18,7 +19,8 @@ import static org.mockito.Mockito.verify;
 class ImageToolsTest {
 
     private final ImageRequestProducer mockProducer = Mockito.mock(ImageRequestProducer.class);
-    private final ImageTools tools = new ImageTools(mockProducer);
+    private final MercalaCoreClient mockCore = Mockito.mock(MercalaCoreClient.class);
+    private final ImageTools tools = new ImageTools(mockProducer, new ProductLookup(mockCore));
 
     @AfterEach
     void tearDown() {
@@ -96,5 +98,39 @@ class ImageToolsTest {
         assertThat(job.name()).isEqualTo("image_job");
         assertThat(job.value()).containsEntry("mode", "ENHANCE");
         assertThat(job.value()).containsEntry("sourceImageUrl", source);
+    }
+
+    /**
+     * The merchant names the product; the tool finds it. Asking them for a UUID is what
+     * this replaces — they have nowhere to look one up, so the ask ended the conversation.
+     */
+    @Test
+    void requestProductImage_acceptsTheProductByName() {
+        UUID productId = UUID.randomUUID();
+        Mockito.when(mockCore.searchCatalog("Navy Linen Shirt", "hybrid", 0, 5))
+                .thenReturn(Map.of("content", java.util.List.of(
+                        Map.of("id", productId.toString(), "name", "Navy Linen Shirt"))));
+        AgentContext.set(new AgentContext(UUID.randomUUID(), UUID.randomUUID(), "MERCHANT_OWNER"));
+
+        Map<String, Object> result = tools.requestProductImage().apply(
+                new RequestProductImageArgs("Navy Linen Shirt", "flat lay on warm stone"));
+
+        assertThat(result.get("status")).isEqualTo("QUEUED");
+        assertThat(result.get("productId")).isEqualTo(productId.toString());
+        verify(mockProducer).sendImageRequest(productId, "flat lay on warm stone");
+    }
+
+    /** A name matching nothing is an answer to the model, not an exception mid-turn. */
+    @Test
+    void requestProductImage_withAnUnknownNameTellsTheModelSo() {
+        Mockito.when(mockCore.searchCatalog(Mockito.anyString(), Mockito.anyString(), Mockito.anyInt(), Mockito.anyInt()))
+                .thenReturn(Map.of("content", java.util.List.of()));
+        AgentContext.set(new AgentContext(UUID.randomUUID(), UUID.randomUUID(), "MERCHANT_OWNER"));
+
+        Map<String, Object> result = tools.requestProductImage().apply(
+                new RequestProductImageArgs("a hat nobody stocks", "studio shot"));
+
+        assertThat(result.get("status")).isEqualTo("PRODUCT_NOT_FOUND");
+        Mockito.verifyNoInteractions(mockProducer);
     }
 }
