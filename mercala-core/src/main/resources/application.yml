@@ -32,7 +32,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    username: ${SPRING_FLYWAY_USERNAME:mercala}
+    # `user`, not `username`. Spring Boot binds spring.flyway.user; spring.flyway.username
+    # is not a property and was silently ignored, so migrations ran as the application
+    # role instead of the owning role. That is unbootstrappable on a fresh database: V3
+    # is the migration that creates mercala_app, so connecting as mercala_app to run it
+    # fails authentication before the first statement.
+    user: ${SPRING_FLYWAY_USERNAME:mercala}
     password: ${SPRING_FLYWAY_PASSWORD:mercala}
 
   # Merchant image uploads. Slightly above mercala.media.upload.max-bytes so an oversized
@@ -67,6 +72,10 @@ mercala:
     session-token: ${MINIO_SESSION_TOKEN:}
     region: ${AWS_REGION:}
     bucket: ${MINIO_BUCKET:mercala-images}
+    # The bucket image-gen writes finished product imagery to. Core never writes here; it
+    # needs the name only to recognise a URL that is already loadable and must not be
+    # handed to the signer.
+    public-bucket: ${MINIO_PUBLIC_BUCKET:mercala-public-images}
   media:
     upload:
       # A phone photograph is 2–5 MB; 10 leaves room for a DSLR export without letting the

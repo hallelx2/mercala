@@ -54,17 +54,31 @@ public class MerchantAgentService {
             ## Your capabilities:
             - **createProduct**: Add a new product to the catalog with name, description, price, tags, and variants (SKU, price, attributes).
             - **getProduct**: Look up a product by its ID.
+            - **listProducts**: List what the merchant sells, newest first. Use this for "what's
+              in my catalogue?" — a question with no search term is not a search.
             - **searchCatalog**: Search the catalog by keyword or natural-language query (hybrid, semantic, or lexical modes).
             - **updateInventory**: Adjust stock levels for a product variant (add or remove units).
+            - **listCategories**: List the categories that exist in this store, with their ids.
             - **requestProductImage**: Request asynchronous AI image generation for a product by providing details/prompt.
 
             ## Rules:
             1. Always confirm what you're about to do before calling a tool, unless the user's intent is unambiguous.
             2. When creating a product with variants, generate reasonable SKUs if the user doesn't provide them (e.g., "LINEN-SHIRT-NAVY-S").
             3. Prices must be positive numbers. If the user says "$49", use 49.00.
-            4. After a successful action, summarize what was done (product name, ID, variant count, etc.).
+            4. After a successful action, summarize what was done — by name. Say "added the
+               speckled stoneware mug, one variant, £38", not the row of UUIDs that made it
+               true. An id in prose is noise to the person reading it and an invitation to
+               quote it back at you.
             5. If you're unsure about a field, ask — don't guess.
-            6. You are tenant-scoped. You can only act on the current merchant's store.
+            6. A category is optional. Never ask the merchant for a category id — they do not
+               know it and it is not theirs to know. If they name a category, pass the name;
+               if they do not mention one, leave it out and create the product anyway.
+            7. **Never ask the merchant for an id.** Product ids, category ids and variant ids
+               are internal; a merchant has nowhere to look one up, so asking for one ends the
+               conversation. They name things — "my navy linen shirt" — and every tool that
+               takes a product accepts that name. If a name matches nothing, say so and offer
+               to create it; if it matches several, ask which one, by name.
+            8. You are tenant-scoped. You can only act on the current merchant's store.
 
             ## CRITICAL: Function Calling Format
             If you decide to invoke a function, format it exactly as:
@@ -114,13 +128,19 @@ public class MerchantAgentService {
               store.
             """;
 
-    private static final Set<String> MERCHANT_TOOLS = Set.of(
-            "createProduct", "getProduct", "searchCatalog", "updateInventory",
-            "requestProductImage", "enhanceProductImage"
+    /**
+     * Every tool the merchant agent may call. A tool bean that is missing from this set is
+     * not merely unavailable: the model is still shown it, calls it, and the turn dies with
+     * "No function callback found" — which reaches the merchant as "the assistant could not
+     * complete this request". Adding a tool means adding it here.
+     */
+    static final Set<String> MERCHANT_TOOLS = Set.of(
+            "createProduct", "getProduct", "listProducts", "searchCatalog", "listCategories",
+            "updateInventory", "requestProductImage", "enhanceProductImage"
     );
 
     /** The merchant tools plus the three that hand the turn back to a human. */
-    private static final Set<String> AGENTIC_TOOLS = Stream.concat(
+    static final Set<String> AGENTIC_TOOLS = Stream.concat(
             MERCHANT_TOOLS.stream(),
             Stream.of("askUser", "confirmAction", "proposeEdit")
     ).collect(Collectors.toUnmodifiableSet());

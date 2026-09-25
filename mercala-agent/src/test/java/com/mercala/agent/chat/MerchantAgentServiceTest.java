@@ -35,7 +35,7 @@ class MerchantAgentServiceTest {
         service = new MerchantAgentService(
                 chatModel,
                 new AgentStreamer(chatModel, java.time.Duration.ofSeconds(30)),
-                new com.mercala.agent.agui.AgUiStreamer(chatModel, java.time.Duration.ofSeconds(30)));
+                new com.mercala.agent.agui.AgUiStreamer(chatModel, java.time.Duration.ofSeconds(30), 0, java.time.Duration.ofMillis(1)));
     }
 
     @AfterEach

@@ -4,6 +4,17 @@ server:
 spring:
   application:
     name: mercala-image-gen
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      image:
+        # Off unless explicitly switched on, because Spring AI builds the image model
+        # eagerly and throws when no API key is set — taking the whole service down over
+        # a provider that is merely unconfigured. That contradicts the chain's own rule
+        # that an unconfigured provider is skipped rather than fatal, and openai is not in
+        # the default chain anyway. Set this and OPENAI_API_KEY together to use it.
+        enabled: ${MERCALA_IMAGE_GEN_OPENAI_ENABLED:false}
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -70,7 +81,14 @@ mercala:
         "[output_quality]": "${REPLICATE_OUTPUT_QUALITY:90}"
         "[num_outputs]": "1"
     pollinations:
-      timeout-seconds: ${POLLINATIONS_TIMEOUT_SECONDS:20}
+      # Generation takes 30-60s on the free tier. At the old 20s the request timed out
+      # every time, surfaced as an IOException, and the chain fell through to the
+      # placeholder — a working provider that looked like a broken one.
+      timeout-seconds: ${POLLINATIONS_TIMEOUT_SECONDS:90}
+      # Anonymous requests are refused on the free tier; the referrer is how a caller
+      # identifies itself. Without it every generation 500s and the chain silently
+      # degrades to the placeholder.
+      referrer: ${POLLINATIONS_REFERRER:mercala}
   kafka:
     product-events-topic: ${MERCALA_KAFKA_PRODUCT_EVENTS_TOPIC:product.events}
     image-requests-topic: ${MERCALA_KAFKA_IMAGE_REQUESTS_TOPIC:image.requests}
@@ -116,6 +134,10 @@ resilience4j:
         slowCallDurationThreshold: 190s
       pollinations-image:
         baseConfig: default
+        # Same reasoning as Replicate above: a generation that legitimately takes most of
+        # a minute is not a slow call worth opening a circuit over. Set above the request
+        # timeout so only calls that hang register.
+        slowCallDurationThreshold: 95s
   retry:
     configs:
       default:

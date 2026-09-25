@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -120,7 +121,7 @@ public class ProductService {
             product.setTags(request.tags());
         }
 
-        if (request.variants() != null) {
+        if (request.variants() != null && !request.variants().isEmpty()) {
             for (CreateVariantRequest vReq : request.variants()) {
                 if (variantRepository.findBySku(vReq.sku()).isPresent()) {
                     throw new ResourceConflictException("Variant SKU already exists: " + vReq.sku());
@@ -128,11 +129,46 @@ public class ProductService {
                 Variant variant = new Variant(vReq.sku(), vReq.attrs(), vReq.price(), vReq.stockRef());
                 product.addVariant(variant);
             }
+        } else {
+            // A product with no variant cannot be sold. The storefront, the cart and orders
+            // are all addressed by variant, so a variantless product renders as "this one
+            // isn't for sale yet" and nothing in the product surface can add one later —
+            // the merchant has named a price for something nobody can buy. One default
+            // variant at that price is what they meant.
+            product.addVariant(new Variant(
+                    defaultSku(tenantId, request.name()), Map.of(), request.price(), null));
         }
 
         Product saved = productRepository.save(product);
         eventPublisher.publishEvent(new ProductAdded(saved.getId(), tenantId));
         return mapToProductResponse(saved);
+    }
+
+    /**
+     * An SKU for a product whose merchant did not give one: the name, in the shape SKUs are
+     * written in. SKUs are unique across the table, so a collision — two stores both
+     * selling a "Navy Linen Shirt" — falls back to a numbered suffix rather than failing
+     * the creation.
+     */
+    private String defaultSku(UUID tenantId, String name) {
+        String base = name == null ? "" : name.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]+", "-");
+        base = base.replaceAll("(^-|-$)", "");
+        if (base.isBlank()) {
+            base = "PRODUCT";
+        }
+        if (base.length() > 40) {
+            base = base.substring(0, 40).replaceAll("-$", "");
+        }
+        if (variantRepository.findBySku(base).isEmpty()) {
+            return base;
+        }
+        for (int suffix = 2; suffix < 100; suffix++) {
+            String candidate = base + "-" + suffix;
+            if (variantRepository.findBySku(candidate).isEmpty()) {
+                return candidate;
+            }
+        }
+        return base + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
     }
 
     @Transactional(readOnly = true)
@@ -161,8 +197,40 @@ public class ProductService {
     @Transactional(readOnly = true)
     public Page<ProductResponse> searchLexical(String query, Pageable pageable) {
         getRequiredTenantId(); // Enforce active tenant context validation
-        return productRepository.searchLexical(query, pageable)
+        return productRepository.searchLexical(toLexicalQuery(query), pageable)
                 .map(this::mapToProductResponse);
+    }
+
+    /**
+     * What a person typed, in the shape the BM25 parser accepts.
+     *
+     * <p>{@code pdb.parse} reads its argument as a query language — {@code field:term},
+     * boolean operators, ranges — so any of its punctuation in ordinary words is a syntax
+     * error, not a search. "River Blue Serving Bowl - Wide" and "t-shirt" both came back as
+     * a 500: <em>could not parse query string, make sure to use column:term pairs</em>.
+     * Shoppers type hyphens; so does the agent when it repeats a product's own name.
+     *
+     * <p>Every term is escaped and quoted, which spends the operator syntax nobody was
+     * offered in exchange for a search that always runs. A query that escapes to nothing
+     * stays empty, and the caller treats that as no results rather than searching for
+     * everything.
+     */
+    static String toLexicalQuery(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        for (String term : raw.trim().split("\\s+")) {
+            String cleaned = term.replaceAll("[\\\\\"]", "").trim();
+            if (cleaned.isEmpty()) {
+                continue;
+            }
+            if (!out.isEmpty()) {
+                out.append(' ');
+            }
+            out.append('"').append(cleaned).append('"');
+        }
+        return out.toString();
     }
 
     @Transactional(readOnly = true)
@@ -191,8 +259,10 @@ public class ProductService {
             return new PageImpl<>(List.of(), pageable, 0);
         }
 
-        // Fetch top lexical candidates
-        Page<Product> lexicalPage = productRepository.searchLexical(query, PageRequest.of(0, candidateLimit));
+        // Fetch top lexical candidates. Escaped for the same reason as searchLexical: the
+        // hybrid path is the default one, so an unescaped hyphen failed the whole search.
+        Page<Product> lexicalPage =
+                productRepository.searchLexical(toLexicalQuery(query), PageRequest.of(0, candidateLimit));
         List<Product> lexicalList = lexicalPage.getContent();
 
         // Fetch top semantic candidates

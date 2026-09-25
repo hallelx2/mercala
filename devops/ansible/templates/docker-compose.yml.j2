@@ -67,6 +67,13 @@ services:
       SPRING_FLYWAY_USERNAME: {{ db_user }}
       SPRING_FLYWAY_PASSWORD: {{ db_password }}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Core's Kafka machinery is behind a flag that nothing was setting, so in the
+      # deployed stack it was all switched off: image.results went unconsumed, the outbox
+      # relay never ran, and the topics were never created. Generated and retouched
+      # imagery reached object storage and stopped there — the picture existed, the
+      # product never learned about it. Knowing the broker's address is not the same as
+      # being told to use it.
+      MERCALA_KAFKA_ENABLED: "true"
       MERCALA_JWT_SECRET: {{ jwt_secret }}
       # Merchant photo uploads land in the same bucket image-gen writes to: an
       # enhancement reads the merchant's original from there and writes its result

@@ -104,6 +104,9 @@ public class Product {
     public void addVariant(Variant variant) {
         variants.add(variant);
         variant.setProduct(this);
+        // The variant's tenant is the product's, always. Carried on the row so the SKU can
+        // be unique per tenant; set here so no caller has to remember.
+        variant.setTenantId(tenantId);
     }
 
     public void removeVariant(Variant variant) {

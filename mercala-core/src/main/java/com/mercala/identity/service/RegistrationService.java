@@ -14,6 +14,7 @@ import com.mercala.identity.exception.ResourceConflictException;
 import com.mercala.identity.exception.ResourceNotFoundException;
 import com.mercala.identity.web.dto.CreateTenantRequest;
 import com.mercala.identity.web.dto.CreateUserRequest;
+import com.mercala.platform.multitenancy.TenantContext;
 
 import java.util.List;
 
@@ -56,7 +57,7 @@ public class RegistrationService {
      * both valid (two real stores, two memberships) and merely race for which ends up
      * active, which the store switcher makes a non-event.
      */
-    public Tenant createStoreFor(java.util.UUID userId, com.mercala.identity.web.dto.CreateStoreRequest request) {
+    public StoreCreation createStoreFor(java.util.UUID userId, com.mercala.identity.web.dto.CreateStoreRequest request) {
         AppUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
         if (tenantRepository.existsBySlug(request.slug())) {
@@ -69,8 +70,17 @@ public class RegistrationService {
 
         membershipRepository.save(new StoreMembership(userId, tenant.getId(), Role.MERCHANT_OWNER));
         user.setTenantId(tenant.getId());
-        userRepository.save(user);
-        return tenant;
+        // The caller's session has no tenant yet — that is the whole point of this call —
+        // so nothing has set app.current_tenant, and row-level security refuses a row
+        // whose tenant_id matches no context. Adopting the new tenant for the rest of the
+        // transaction is what makes the write legal, and it is also simply true: from the
+        // moment this user owns a store, this is the store they are acting in.
+        AppUser owner = withTenant(tenant.getId(), () -> userRepository.save(user));
+        // The owner is returned rather than looked up again by the caller. A second
+        // lookup would run with the caller's still-tenantless session, and the row it
+        // wants now carries a tenant_id — so row-level security would hide the very user
+        // this call just created a store for, and the request would 404 after succeeding.
+        return new StoreCreation(tenant, owner);
     }
 
     @Transactional(readOnly = true)
@@ -90,8 +100,10 @@ public class RegistrationService {
 
         String hashedPassword = passwordEncoder.encode(request.ownerPassword());
         AppUser owner = new AppUser(tenant.getId(), request.ownerEmail(), hashedPassword, Role.MERCHANT_OWNER);
-        owner = userRepository.save(owner);
-        membershipRepository.save(new StoreMembership(owner.getId(), tenant.getId(), Role.MERCHANT_OWNER));
+        // Same reason as createStoreFor: this runs with no tenant in context, and the
+        // owner row it writes belongs to the tenant being created.
+        AppUser saved = withTenant(tenant.getId(), () -> userRepository.save(owner));
+        membershipRepository.save(new StoreMembership(saved.getId(), tenant.getId(), Role.MERCHANT_OWNER));
 
         return tenant;
     }
@@ -149,5 +161,36 @@ public class RegistrationService {
         }
 
         return userRepository.findAll();
+    }
+
+    /** A newly created store and the user who now owns it, as one result. */
+    public record StoreCreation(Tenant tenant, AppUser owner) {}
+
+    /**
+     * Runs a repository call as though the request belonged to {@code tenantId}, then puts
+     * the previous context back.
+     *
+     * <p>{@code TenantFilterAspect} reads {@link TenantContext} before every repository
+     * call and pushes it into the connection's {@code app.current_tenant}, which is what
+     * the row-level security policies compare against. Registration paths run before a
+     * tenant exists, so without this the policy has nothing to match and the insert is
+     * refused — a failure that only appears against a real Postgres, never in a test that
+     * skips RLS.
+     *
+     * <p>The previous value is restored rather than cleared: this is a helper for one
+     * write inside a larger request, not a way to change what the request is.
+     */
+    private <T> T withTenant(java.util.UUID tenantId, java.util.function.Supplier<T> work) {
+        java.util.UUID previous = TenantContext.getCurrentTenant();
+        TenantContext.setCurrentTenant(tenantId);
+        try {
+            return work.get();
+        } finally {
+            if (previous == null) {
+                TenantContext.clear();
+            } else {
+                TenantContext.setCurrentTenant(previous);
+            }
+        }
     }
 }

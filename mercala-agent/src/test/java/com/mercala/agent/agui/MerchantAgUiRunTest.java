@@ -40,7 +40,7 @@ class MerchantAgUiRunTest {
     private final MerchantAgentService service = new MerchantAgentService(
             chatModel,
             new AgentStreamer(chatModel, Duration.ofSeconds(5)),
-            new AgUiStreamer(chatModel, Duration.ofSeconds(5)));
+            new AgUiStreamer(chatModel, Duration.ofSeconds(5), 0, Duration.ofMillis(1)));
 
     private final AtomicReference<Prompt> captured = new AtomicReference<>();
 

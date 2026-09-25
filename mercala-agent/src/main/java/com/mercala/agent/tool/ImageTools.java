@@ -24,35 +24,42 @@ public class ImageTools {
     private static final Logger log = LoggerFactory.getLogger(ImageTools.class);
 
     private final ImageRequestProducer imageRequestProducer;
+    private final ProductLookup productLookup;
 
-    public ImageTools(ImageRequestProducer imageRequestProducer) {
+    public ImageTools(ImageRequestProducer imageRequestProducer, ProductLookup productLookup) {
         this.imageRequestProducer = imageRequestProducer;
+        this.productLookup = productLookup;
     }
 
     @Bean
     @Description("Requests asynchronous AI image generation for a product catalog item. " +
-            "Requires a product ID and a detailed prompt describing what the image should show. " +
+            "Takes the product — its name is enough, an id is not required — and a detailed " +
+            "prompt describing what the image should show. " +
             "Returns a status map indicating the request was queued.")
     public Function<RequestProductImageArgs, Map<String, Object>> requestProductImage() {
         return args -> ToolActivity.observe("requestProductImage", args, () -> {
             log.info("Tool: requestProductImage invoked — productId={}, prompt='{}'",
                     args.productId(), args.prompt());
 
-            UUID productId = UUID.fromString(args.productId());
+            ProductLookup.Resolution resolved = productLookup.resolve(args.productId());
+            if (!resolved.found()) {
+                return ProductLookup.notFound(args.productId(), resolved);
+            }
+            UUID productId = resolved.id();
             imageRequestProducer.sendImageRequest(productId, args.prompt());
 
             // Generation is asynchronous — the merchant will not see a picture for several
             // seconds, so tell the client a job exists rather than letting the turn end
             // looking like nothing happened.
             AgentContext.currentChannel().custom("image_job", Map.of(
-                    "productId", args.productId(),
+                    "productId", productId.toString(),
                     "mode", "GENERATE",
                     "phase", "queued",
                     "prompt", args.prompt() == null ? "" : args.prompt()));
 
             return Map.of(
                     "status", "QUEUED",
-                    "productId", args.productId(),
+                    "productId", productId.toString(),
                     "message", "Image generation request published successfully to Kafka."
             );
         });
@@ -61,7 +68,7 @@ public class ImageTools {
     @Bean
     @Description("Retouches a photograph the merchant uploaded, rather than inventing a new image. "
             + "Use this whenever the merchant has supplied their own photo — it is almost always what "
-            + "they want for a real product. Requires the product ID, the uploaded image's URL, and an "
+            + "they want for a real product. Takes the product (its name is enough), the uploaded image's URL, and an "
             + "instruction describing the change ('remove the background and light it like a studio "
             + "shot'). Optionally takes a strength between 0 and 1: low values (0.2–0.4) keep the "
             + "product recognisably the same, high values redraw it. Returns once the job is queued; "
@@ -79,7 +86,11 @@ public class ImageTools {
                         "message", "No uploaded image was given. Ask the merchant to attach a photo first.");
             }
 
-            UUID productId = UUID.fromString(args.productId());
+            ProductLookup.Resolution resolved = productLookup.resolve(args.productId());
+            if (!resolved.found()) {
+                return ProductLookup.notFound(args.productId(), resolved);
+            }
+            UUID productId = resolved.id();
             imageRequestProducer.sendEnhancementRequest(
                     productId, args.sourceImageUrl(), args.instruction(), args.strength());
 
@@ -87,7 +98,7 @@ public class ImageTools {
             // progress state on the other — so the merchant watches it happen instead of
             // waiting on a sentence that says it is happening.
             AgentContext.currentChannel().custom("image_job", Map.of(
-                    "productId", args.productId(),
+                    "productId", productId.toString(),
                     "mode", "ENHANCE",
                     "phase", "queued",
                     "sourceImageUrl", args.sourceImageUrl(),
@@ -95,7 +106,7 @@ public class ImageTools {
 
             return Map.of(
                     "status", "QUEUED",
-                    "productId", args.productId(),
+                    "productId", productId.toString(),
                     "sourceImageUrl", args.sourceImageUrl(),
                     "message", "Enhancement request published. The retouched image will attach to the product shortly."
             );

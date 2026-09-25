@@ -23,6 +23,15 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+            Pinned above the Spring Boot BOM's 1.19.8, whose docker-java client negotiates
+            Docker API 1.32. Docker has since raised its own floor to 1.40 and refuses that
+            client outright — every Testcontainers test then fails with "Could not find a
+            valid Docker environment", which reads as a broken machine rather than an old
+            dependency. CI's runner image still ships an older daemon, so this goes red on a
+            current developer machine while staying green in the build.
+        -->
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <!-- Modules. mercala-image-gen added in later milestone (M6). -->

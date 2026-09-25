@@ -43,7 +43,15 @@ public class Variant {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @Column(nullable = false, unique = true)
+    /**
+     * Denormalised from the parent product so the SKU can be indexed unique per tenant —
+     * Postgres cannot index across the join, and SKUs are a merchant's namespace rather
+     * than the platform's. Set by {@code Product.addVariant}; nothing else should write it.
+     */
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
+    @Column(nullable = false)
     private String sku;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -72,6 +80,14 @@ public class Variant {
         this.attrs = attrs;
         this.price = price;
         this.stockRef = stockRef;
+    }
+
+    public UUID getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(UUID tenantId) {
+        this.tenantId = tenantId;
     }
 
     public UUID getId() {

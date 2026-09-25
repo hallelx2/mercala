@@ -27,12 +27,21 @@ public class PollinationsImageProvider implements ImageProvider {
     private static final Logger log = LoggerFactory.getLogger(PollinationsImageProvider.class);
     private static final String BASE_URL = "https://image.pollinations.ai/prompt/";
 
+    /**
+     * Identifies the caller to Pollinations. Anonymous requests are refused with a 500 on
+     * the free tier — the picture simply never arrives and the chain falls through to the
+     * placeholder, which looks like a broken generator rather than a missing parameter.
+     */
+    private final String referrer;
+
     private final HttpClient httpClient;
     private final Duration requestTimeout;
 
     public PollinationsImageProvider(
-            @Value("${mercala.image-gen.pollinations.timeout-seconds:20}") long timeoutSeconds) {
+            @Value("${mercala.image-gen.pollinations.timeout-seconds:20}") long timeoutSeconds,
+            @Value("${mercala.image-gen.pollinations.referrer:mercala}") String referrer) {
         this.requestTimeout = Duration.ofSeconds(timeoutSeconds);
+        this.referrer = referrer;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(8))
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -48,7 +57,8 @@ public class PollinationsImageProvider implements ImageProvider {
     public byte[] generateImage(String prompt) {
         String url = BASE_URL
                 + URLEncoder.encode(prompt == null ? "" : prompt, StandardCharsets.UTF_8)
-                + "?width=1024&height=1024&nologo=true&private=true";
+                + "?width=1024&height=1024&nologo=true&private=true"
+                + "&referrer=" + URLEncoder.encode(referrer, StandardCharsets.UTF_8);
 
         log.info("Requesting image from Pollinations.ai for prompt: '{}'", prompt);
         HttpRequest request = HttpRequest.newBuilder()

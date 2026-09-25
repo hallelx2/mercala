@@ -22,6 +22,7 @@ import com.mercala.agent.chat.AgentContext;
 import com.mercala.agent.chat.AgentContextAccessor;
 
 import reactor.core.publisher.Flux;
+import reactor.util.retry.Retry;
 import reactor.core.scheduler.Schedulers;
 
 /**
@@ -62,12 +63,42 @@ public class AgUiStreamer {
 
     private final ChatModel chatModel;
     private final Duration streamTimeout;
+    private final int connectRetries;
+    private final Duration retryBackoff;
 
     public AgUiStreamer(
             ChatModel chatModel,
-            @Value("${mercala.agent.stream-timeout:120s}") Duration streamTimeout) {
+            @Value("${mercala.agent.stream-timeout:120s}") Duration streamTimeout,
+            @Value("${mercala.agent.connect-retries:2}") int connectRetries,
+            @Value("${mercala.agent.retry-backoff:2s}") Duration retryBackoff) {
         this.chatModel = chatModel;
         this.streamTimeout = streamTimeout;
+        this.connectRetries = connectRetries;
+        this.retryBackoff = retryBackoff;
+    }
+
+    /**
+     * Whether a failure is the kind a second attempt could get past: the connection never
+     * came up, or it died before the provider said anything. A refusal — a 4xx, a bad key,
+     * a rejected request — is not, and retrying one only spends the merchant's time.
+     *
+     * <p>Nor is a stall: {@code stream-timeout} sits below the servlet and nginx timeouts
+     * on purpose, and retrying a turn that has already burned it would run past both and
+     * turn a clean timeout frame back into a dead connection.
+     */
+    private static boolean isWorthRetrying(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.springframework.web.client.HttpClientErrorException
+                    || cause instanceof org.springframework.web.reactive.function.client.WebClientResponseException) {
+                return false;
+            }
+            if (cause instanceof java.io.IOException
+                    || cause instanceof org.springframework.web.reactive.function.client.WebClientRequestException
+                    || cause instanceof org.springframework.web.client.ResourceAccessException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -87,6 +118,7 @@ public class AgUiStreamer {
         AgentContext runContext = context.withChannel(channel);
         String messageId = "msg_" + UUID.randomUUID();
         AtomicBoolean textStarted = new AtomicBoolean(false);
+        AtomicBoolean answered = new AtomicBoolean(false);
 
         Flux<AgUiEvent> modelTurn = Flux.defer(() -> {
                     // Runs on the boundedElastic worker that will also run the model call.
@@ -94,10 +126,34 @@ public class AgUiStreamer {
                     log.info("AG-UI run starting — tenant={}, thread={}, run={}",
                             runContext.tenantId(), threadId, runId);
 
-                    return chatModel.stream(prompt)
+                    // Deferred so a retry issues a fresh call rather than resubscribing to
+                    // the connection that just failed.
+                    return Flux.defer(() -> chatModel.stream(prompt))
                             // A stalled upstream would otherwise hold a bounded worker
                             // indefinitely, and enough of them starve unrelated streams.
                             .timeout(streamTimeout)
+                            .doOnNext(response -> answered.set(true))
+                            // A connection that never produced a chunk is worth trying
+                            // again: the provider may be a long way away, and a reset
+                            // during the handshake currently costs the merchant their whole
+                            // turn for no reason they can see.
+                            //
+                            // Only before the first chunk, which is the load-bearing part.
+                            // Past that point the model may already have called a tool —
+                            // created a product, adjusted stock — and a retry would do it
+                            // twice. Nothing about a stream is safe to replay once it has
+                            // started; everything about it is safe to replay before.
+                            .retryWhen(Retry.backoff(connectRetries, retryBackoff)
+                                    .filter(error -> !answered.get() && isWorthRetrying(error))
+                                    .doBeforeRetry(signal -> log.warn(
+                                            "Model call failed before answering ({}); retrying — thread={}, run={}",
+                                            signal.failure().toString(), threadId, runId)))
+                            // Retry wraps the cause in a RetryExhaustedException, which
+                            // would reach the frame mapper as an unrecognised error and
+                            // cost a stream timeout its own code.
+                            .onErrorMap(
+                                    reactor.core.Exceptions::isRetryExhausted,
+                                    error -> error.getCause() == null ? error : error.getCause())
                             .flatMap(response -> Flux.fromIterable(textEvents(response, messageId, textStarted)))
                             .concatWith(Flux.defer(() -> textStarted.get()
                                     ? Flux.just(new AgUiEvent.TextMessageEnd(messageId))

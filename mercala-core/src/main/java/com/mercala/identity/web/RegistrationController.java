@@ -58,12 +58,12 @@ public class RegistrationController {
             @org.springframework.security.core.annotation.AuthenticationPrincipal
             com.mercala.platform.security.AuthenticatedUser principal,
             @Valid @RequestBody com.mercala.identity.web.dto.CreateStoreRequest request) {
-        Tenant tenant = registrationService.createStoreFor(principal.userId(), request);
-        com.mercala.identity.AppUser owner = registrationService.getUser(principal.userId());
+        var created = registrationService.createStoreFor(principal.userId(), request);
+        Tenant tenant = created.tenant();
         return new com.mercala.identity.web.dto.StoreCreatedResponse(
                 tenant.getId(), tenant.getSlug(), tenant.getName(), tenant.getStatus().name(),
                 tenant.getDescription(),
-                jwtService.issue(owner), "Bearer", jwtService.getExpirationSeconds());
+                jwtService.issue(created.owner()), "Bearer", jwtService.getExpirationSeconds());
     }
 
     /**

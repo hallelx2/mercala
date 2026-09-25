@@ -9,6 +9,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.FieldError;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -36,6 +37,43 @@ public class GlobalExceptionHandler {
         }
         problem.setProperty("errors", fieldErrors);
         return problem;
+    }
+
+    /**
+     * A body Jackson could not read — a field of the wrong type, malformed JSON.
+     *
+     * <p>Without this, Spring's default handling returns a 400 whose body carries a
+     * timestamp, a status and a path, and no word about what was wrong. A person retries
+     * blindly and an API client cannot correct itself at all: the merchant agent spent
+     * four turns re-asking for a field it had already been given, because "Bad Request"
+     * was the entire reply.
+     *
+     * <p>The field path and expected type are named; the offending value is not. Echoing
+     * it back would put whatever the caller sent into logs and responses, and the caller
+     * already knows what they sent.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleUnreadableBody(HttpMessageNotReadableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, describe(ex));
+        problem.setTitle("Bad Request");
+        return problem;
+    }
+
+    private static String describe(HttpMessageNotReadableException ex) {
+        if (ex.getCause() instanceof com.fasterxml.jackson.databind.exc.InvalidFormatException invalid) {
+            String field = invalid.getPath().stream()
+                    .map(com.fasterxml.jackson.databind.JsonMappingException.Reference::getFieldName)
+                    .filter(java.util.Objects::nonNull)
+                    .reduce((outer, inner) -> outer + "." + inner)
+                    .orElse(null);
+            String expected = invalid.getTargetType() == null
+                    ? "a different type" : invalid.getTargetType().getSimpleName();
+            return field == null
+                    ? "A field in the request body is not a valid " + expected + "."
+                    : "'" + field + "' is not a valid " + expected + ".";
+        }
+        return "The request body could not be read as JSON.";
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
