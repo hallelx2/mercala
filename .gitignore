@@ -69,3 +69,6 @@ devops/deploy.sh
 
 # Session worktrees are local machinery, never part of the repo
 .claude/worktrees/
+
+# Local run logs from scripts/dev-stack.sh
+.dev/

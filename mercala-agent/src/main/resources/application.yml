@@ -20,6 +20,10 @@ spring:
       api-key: ${OPENAI_API_KEY:mock-key}
       base-url: ${OPENAI_BASE_URL:https://api.openai.com}
       chat:
+        # Not every OpenAI-compatible provider serves /v1/chat/completions at the root of
+        # its base URL. Making the path configurable is what keeps "swap the provider" a
+        # configuration change rather than a code one.
+        completions-path: ${OPENAI_COMPLETIONS_PATH:/v1/chat/completions}
         options:
           model: ${OPENAI_MODEL:gpt-4o}
   kafka:

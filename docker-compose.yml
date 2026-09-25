@@ -8,7 +8,12 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Mounted at /var/lib/postgresql, not .../data. ParadeDB now tracks Postgres 18,
+      # whose image stores the cluster in a major-version-named subdirectory so that
+      # pg_upgrade --link never has to cross a mount boundary. A volume on the old
+      # .../data path is refused outright ("unused mount/volume") and the container exits
+      # before the postmaster starts.
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mercala -d mercala"]
       interval: 10s
@@ -29,11 +34,16 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_LOG_DIRS: /tmp/kafka-logs
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     ports:
       - "9092:9092"
+    # The image runs as the unprivileged `appuser`, but Docker creates the mountpoint for
+    # a named volume owned by root. The broker then cannot write its own meta.properties
+    # and dies during format with AccessDeniedException. Running as root is what makes a
+    # persistent log directory work here; nothing in the local stack is exposed off-host.
+    user: root
     volumes:
-      - kafka_data:/tmp/kafka-logs
+      - kafka_data:/var/lib/kafka/data
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 10s

@@ -61,6 +61,39 @@ docker compose down
 
 All services use named volumes for persistence.
 
+## Running the whole stack locally
+
+Three services and four containers. `docker compose up -d` brings up Postgres, Kafka,
+Redis and MinIO; the services run on the host.
+
+```bash
+cp .env.example local.env     # then edit: it is gitignored
+docker compose up -d
+./mvnw -DskipTests install
+scripts/dev-stack.sh all      # core, agent, image-gen — logs in .dev/
+```
+
+`local.env` is where ports and credentials live, so a machine already running something on
+5432 or 8080 does not need the compose file edited. Two settings are worth knowing about:
+
+- **`MERCALA_KAFKA_ENABLED=true`.** Core's consumers, topic creation and outbox relay are
+  all behind this flag. Without it a generated image uploads to storage and never attaches
+  to its product, and nothing in the logs says why.
+- **`OPENAI_BASE_URL` / `OPENAI_COMPLETIONS_PATH` / `OPENAI_MODEL`.** Any OpenAI-compatible
+  endpoint with tool calling will do. The path is configurable because not every provider
+  serves `/v1/chat/completions` at the root of its base URL.
+
+MinIO needs its two buckets once, and the public one needs anonymous read — that is where
+finished product imagery is served from:
+
+```bash
+docker exec mercala-minio-1 sh -c 'mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb -p local/mercala-images local/mercala-public-images && mc anonymous set download local/mercala-public-images'
+```
+
+The web app lives in the `mercala-web` repo and talks to one gateway address, so point it
+at an nginx mirroring `devops/ansible/templates/nginx.conf.j2`: `/` to core, `/api/v1/agent`
+rewritten to `/api/agent` on the agent, `/api/v1/images` to image-gen.
+
 ## Roadmap
 
 10 build phases (M0–M9) + a launch phase (M10), tracked in Linear. M0 = this foundation.
