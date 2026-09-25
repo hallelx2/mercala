@@ -103,6 +103,17 @@ public class AuthController {
     }
 
     /** Authenticated: the current principal, their active store, and all their stores. */
+    /**
+     * Read in one transaction, deliberately.
+     *
+     * <p>The tenant a row-level security policy compares against is set with
+     * {@code set_config(..., is_local => true)} — it lives for the transaction and no
+     * longer. These repository calls are made straight from the controller, so without
+     * this each one is its own transaction and the setting does not survive to the
+     * statement it was set for: the caller's own user row comes back empty, and the
+     * dashboard greets them as nobody.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @GetMapping("/me")
     public MeResponse me(@AuthenticationPrincipal AuthenticatedUser principal) {
         Tenant tenant = principal.tenantId() != null

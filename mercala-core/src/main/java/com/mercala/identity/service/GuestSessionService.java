@@ -85,10 +85,36 @@ public class GuestSessionService {
         // Bcrypt over a value that is generated here, never returned, and never written
         // anywhere else. There is no password to present, so this identity cannot be logged
         // into — it exists to own a cart, not to be an account.
-        AppUser guest = users.save(new AppUser(
-                tenant.getId(), email, passwordEncoder.encode(UUID.randomUUID().toString()), Role.SHOPPER));
+        // Adopt the store's tenant for the write. This call is anonymous by definition —
+        // a shopper who has signed into nothing — so nothing has set app.current_tenant,
+        // and row-level security refuses a row whose tenant matches no context. The guest
+        // belongs to the store they are standing in, so that is the context to write under.
+        AppUser guest = withTenant(tenant.getId(), () -> users.save(new AppUser(
+                tenant.getId(), email, passwordEncoder.encode(UUID.randomUUID().toString()), Role.SHOPPER)));
 
         log.info("Issued a guest session for store {} (tenant {})", storeSlug, tenant.getId());
         return guest;
+    }
+
+    /**
+     * Runs one repository call as though the request belonged to {@code tenantId}, then
+     * restores whatever context was there.
+     *
+     * <p>Mirrors the same helper in RegistrationService: the tenant a policy compares
+     * against is pushed into the connection by an aspect that reads TenantContext, and the
+     * public paths run with none.
+     */
+    private <T> T withTenant(UUID tenantId, java.util.function.Supplier<T> work) {
+        UUID previous = com.mercala.platform.multitenancy.TenantContext.getCurrentTenant();
+        com.mercala.platform.multitenancy.TenantContext.setCurrentTenant(tenantId);
+        try {
+            return work.get();
+        } finally {
+            if (previous == null) {
+                com.mercala.platform.multitenancy.TenantContext.clear();
+            } else {
+                com.mercala.platform.multitenancy.TenantContext.setCurrentTenant(previous);
+            }
+        }
     }
 }
